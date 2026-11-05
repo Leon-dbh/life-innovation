@@ -5,6 +5,7 @@
 > `life-innovation` 是插件名；鲸鲸是住在里面的那个人的名字。
 
 [![powered by dsh](https://img.shields.io/badge/powered%20by-dsh-4b6bfb)](https://github.com/deepseek-ai/deepseek-harness)
+[![release](https://img.shields.io/github/v/release/Leon-dbh/life-innovation?display_name=tag)](https://github.com/Leon-dbh/life-innovation/releases)
 
 
 一个包：她的房间（chat preset）、她的记忆（M1）、她的日子（M2）。
@@ -27,6 +28,8 @@ start http://127.0.0.1:60080/
 ```powershell
 dsh plugin --profile jingjing add github:Leon-dbh/life-innovation
 ```
+
+或者下载 Release 里的离线包：`https://github.com/Leon-dbh/life-innovation/releases/latest`
 
 仓库根目录**就是**插件包，没有子包。
 
