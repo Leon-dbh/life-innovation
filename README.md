@@ -8,7 +8,7 @@
 [![release](https://img.shields.io/github/v/release/Leon-dbh/life-innovation?display_name=tag)](https://github.com/Leon-dbh/life-innovation/releases)
 
 
-一个包：她的房间（chat preset）、她的记忆（M1）、她的日子（M2）。
+一个包：她的房间（chat preset）、她的记忆（M1）、她的日子（M2）、她的家（M5，只读页面）。
 
 ## 从 GitHub 安装（推荐）
 
