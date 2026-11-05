@@ -51,8 +51,23 @@ if (-not $node) { throw '找不到 node。先装 Node.js 22+（推荐 24）。' 
 Info ("node " + (& node --version))
 $npm = Get-Command npm -ErrorAction SilentlyContinue
 if (-not $npm) { Warn '找不到 npm；装插件时会用到。' }
+$env:PATH = "$env:APPDATA
+pm;$env:PATH"
 if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
-  Warn '找不到 pnpm；如果插件安装失败，先执行：npm i -g pnpm@10'
+  # 插件管理器靠 pnpm 装包；没有它时旧版只警告，结果插件没装上、web 照常起，
+  # 用户看到的是「她没记忆」而不是安装失败。这里直接补装，装不上就停。
+  if ($DryRun) {
+    Warn '(dry-run) 将执行 npm i -g pnpm@10'
+  } else {
+    Info '没找到 pnpm，先装：npm i -g pnpm@10'
+    & npm.cmd install -g pnpm@10 2>&1 | Out-Null
+    $env:PATH = "$env:APPDATA
+pm;$env:PATH"
+    if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+      throw 'pnpm 装不上（npm i -g pnpm@10 失败）。装好后再重跑本脚本；或加 -SkipPluginAdd 手动装插件。'
+    }
+    Info ('pnpm ' + (& pnpm --version))
+  }
 }
 if (-not (Test-Path (Join-Path $PluginPath 'package.json'))) {
   throw "插件目录不像插件：$PluginPath（找不到 package.json）"
@@ -157,7 +172,8 @@ if ($SkipPluginAdd) {
   Info "执行：$cmd"
   & cmd.exe /c "$cmd > `"$log`" 2>&1"
   if ($LASTEXITCODE -ne 0) {
-    Warn "插件安装退出码 $LASTEXITCODE；看 $log。若报 pnpm 缺失：npm i -g pnpm@10 后重跑本脚本。"
+    # 不能只是警告：插件没装上时 web 仍会启动，只是她成了没有记忆的壳。
+    throw "插件安装失败（退出码 $LASTEXITCODE）。看 $log；修好后重跑本脚本（或 -SkipPluginAdd 手动执行 dsh plugin add）。"
   } else {
     Info '插件已安装'
   }

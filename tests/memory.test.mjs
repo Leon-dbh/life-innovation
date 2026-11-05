@@ -77,6 +77,13 @@ assert.equal(acts.find((a) => a.tool === 'web_search').status, 'called')
 assert.ok(buildPack({ store, now: now + 2, maxChars: 1200 }).includes('你最近做过的事'), '有动作时记忆包应带上「做过的事」')
 
 
+// 6.1) 重启后遗留的 called 不能算「做成了」：启动时标 uncertain
+const orphaned = store.markOrphanActions()
+assert.equal(orphaned, 1, '只有还停在 called 的那一条会被标')
+assert.equal(store.recentActions(5).find((a) => a.tool === 'web_search').status, 'uncertain')
+assert.equal(store.recentActions(5).find((a) => a.tool === 'read_file').status, 'ok', '已经有结果的不动')
+assert.equal(store.markOrphanActions(), 0, '再跑一次没有可标的')
+
 // 7) 旧计划没有 due_at 时不能永久挂着：超过 2 天就退役
 store.addAssertion({ ts: now - 3 * 86400000, subject: '他', predicate: '计划:去医院复查', value: '去医院复查', source: 'x' })
 assert.equal(store.livePlans('他', 5, now).some((p) => p.ts < now - 2 * 86400000), false, '旧的无期限计划应失效')

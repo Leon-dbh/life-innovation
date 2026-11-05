@@ -22,9 +22,9 @@
     }
   },
   "scripts": {
-    "test": "node tests/memory.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/packcache.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/portability.test.mjs && node tests/merge.test.mjs && node tests/lifecycle.test.mjs && node tests/jsonschema.test.mjs",
+    "test": "node tests/memory.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/packcache.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/portability.test.mjs && node tests/merge.test.mjs && node tests/lifecycle.test.mjs && node tests/summaries.test.mjs && node tests/jsonschema.test.mjs && node tests/prompt_policy.test.mjs",
     "pack": "npm pack",
-    "check": "node --check index.js && node --check lib/store.js && node --check lib/life.js"
+    "check": "node --check index.js && node --check lib/store.js && node --check lib/life.js && node --check lib/summaries.js && node --check lib/merge.js && node --check lib/tools.js"
   },
   "license": "MIT",
   "engines": {

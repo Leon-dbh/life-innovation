@@ -52,6 +52,15 @@ assert.equal(planDue('明天', base), new Date(2026, 10, 7, 10, 0, 0).getTime())
 assert.equal(planDue('后天', base), new Date(2026, 10, 8, 10, 0, 0).getTime())
 assert.equal(planDue('今晚', base), new Date(2026, 10, 6, 23, 0, 0).getTime())
 
+// ---- 一整天没有真实动作：不写日记，也不制造「写日记」这个动作 ----
+const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jj-empty-'))
+const emptyStore = new MemoryStore(path.join(emptyDir, 't.sqlite'))
+const quiet = tick({ store: emptyStore, now: new Date(2026, 10, 7, 10, 0, 0).getTime(), dir: emptyDir })
+assert.equal(quiet, null, '空日子不应写日记')
+assert.equal(emptyStore.recentActions(5).length, 0, '空日子也不应落写日记动作')
+emptyStore.close()
+fs.rmSync(emptyDir, { recursive: true, force: true })
+
 store.close()
 fs.rmSync(dir, { recursive: true, force: true })
 console.log('OK: life aggregate / evidence / idle / diary / tick / plan due')

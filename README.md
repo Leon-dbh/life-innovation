@@ -110,7 +110,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/jingjing.sqli
 ## 记忆生命周期（M3.2）
 - **双半衰期**：普通记忆 30 天掉一半，带情绪的 7 天掉一半（`lib/lifecycle.js`）；只影响排序权重，不删原话。
 - **归档**：90 天前的原话搬到 `raw_archive`，id 不变，证据 `raw:N` 仍然有效；`memory_read`/召回都能访问，只是不再默认挤占候选。
-- **回收站**：`store.recycleRaw(id)` 从召回和阅读里拿走，payload 留在 `recycle` 表里可查。
+- **回收站**：`store.recycleRaw(id)` 从召回和阅读里拿走，payload 留在 `recycle` 表里可查；放回去用 `node tools/restore.mjs --list` / `--id N`（原 id 空着就放回原 id，证据 ref 不变）。
 - **截断按行**：记忆包放不下时以整行为单位停住，不再把「（证据：raw:12」切成半个词。
 
 ## 主动开口（M2.1）
@@ -146,9 +146,13 @@ node tools\merge.mjs --target D:\jingjing-home\state\jingjing.sqlite `
 powershell -ExecutionPolicy Bypass -File install\install.ps1 -StartService
 ```
 
+- 安装脚本不会静默降级：缺 pnpm 会自动 `npm i -g pnpm@10`，仍装不上或插件安装失败会直接报错停止，不会留下一个「没有记忆」的实例。
 - 守护进程 `<home>\service\service.ps1`：起 `dsh web`，把打印出来的带 token 地址写进 `state\web-url.txt`；web 退出就 5 秒后重拉（最长退避 60 秒）。
 - 固定入口 `http://127.0.0.1:60080/`（`service\entry.mjs`）：每次启动 token 都会变，但书签不用变——它把请求 302 到当前地址，token 仍由 dsh 自己校验，代理不碰会话内容。
 - 开机自启：`HKCU\Software\Microsoft\Windows\CurrentVersion\Run\JingjingService`（登录时启动，不需要管理员）。之所以不用计划任务，是 `schtasks /SC ONLOGON` 在普通权限下会被拒绝。
+- 单例：`state\service.pid` 记着守护进程 pid；同一个数据目录不会跑起第二个守护（否则两个 node 抢 60081）。
+- 收进程树：停 web 时用 `taskkill /T /F` 连 node 子进程一起收，避免「壳退了、端口还占着」。
+- 看护代理：`entry.mjs` 退出会被守护重新拉起，固定入口不会静默消失。
 - 停止：在 `state\` 下新建 `service.stop` 文件；或结束 `service.ps1` 进程。
 - 日志：`logs\service.log`（守护）、`logs\web-<时间>.log`（每次启动的 web 输出）。
 

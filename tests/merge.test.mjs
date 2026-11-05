@@ -44,6 +44,13 @@ s.touchRelation('他', 2500)
 s.replaceLifeBlocks('2026-11-05', [
   { activity: '写日记', startedAt: 2200, endedAt: 2200, evidence: ['act:2'] },
 ], 2300)
+// 来源库里有一句已经被 90 天归档规则搬去 raw_archive 的旧原话；
+// 它同样是某个日子块的证据——合并不能把它和它证明的日子一起丢掉。
+const sOld = s.addRaw(500, 's-source', 'user', '很久以前说过的一句')
+s.archiveRawBefore(800)
+s.replaceLifeBlocks('2026-11-04', [
+  { activity: '和他说说话', startedAt: 500, endedAt: 500, evidence: [`raw:${sOld}`] },
+], 600)
 const sBox = new Outbox(s.db)
 sBox.create({ channel: 'test', target: 'p1', text: '在吗', now: 1400 })
 sBox.create({ channel: 'test', target: 'p1', text: '另一条', now: 1600 })
@@ -52,8 +59,9 @@ s.close()
 const report = mergeDatabase({ targetPath, sourcePath })
 
 // 1) 原话：重复的跳过，新原话进来。
-assert.equal(report.raw_turns.added, 1)
+assert.equal(report.raw_turns.added, 2, '归档里的旧原话也要搬过来')
 assert.equal(report.raw_turns.skipped, 1)
+assert.equal(report.raw_turns.fromArchive, 1)
 
 // 2) 动作：call_id 相同的跳过，不同 id 的进来。
 assert.equal(report.actions.added, 1)
@@ -88,6 +96,11 @@ assert.equal(profiles.find((p) => p.key === '名字').value, '林晚')
 assert.equal(m.relation().lastSeen, 2500)
 
 // 7) 日子块：证据从来源库的 act:2 改到合并后的动作 id。
+const oldDay = m.lifeForDate('2026-11-04')
+assert.equal(oldDay.length, 1, '归档原话证明的日子块不能被丢掉')
+const oldRawId = Number(oldDay[0].evidence[0].split(':')[1])
+assert.ok(m.rawById(oldRawId), '旧日子的证据也要指向合并后真实存在的原话')
+
 const blocks = m.lifeForDate('2026-11-05')
 assert.equal(blocks.length, 2)
 const diaryBlock = blocks.find((b) => b.activity === '写日记')

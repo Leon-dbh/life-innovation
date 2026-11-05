@@ -7,7 +7,8 @@
  * - 每轮注入走 ctx.systemPrompt.context（动态上下文），不写死进历史。
  */
 import { MemoryStore } from './lib/store.js'
-import { extractAssertions, summarizeTurns } from './lib/extract.js'
+import { extractAssertions } from './lib/extract.js'
+import { maybeSummarize } from './lib/summaries.js'
 import { createPackCache } from './lib/packCache.js'
 import { syncDay, tick } from './lib/life.js'
 import { registerMemoryTools } from './lib/tools.js'
@@ -73,6 +74,10 @@ export function apply(ctx, config = {}) {
 
   ctx.effect(() => () => store.close())
 
+  // 启动时上一进程遗留的「called」永远等不到结果了：标成 uncertain，不能算她做成了。
+  const orphans = store.markOrphanActions()
+  if (orphans) ctx.logger?.warn?.(`[jingjing] 有 ${orphans} 条动作停在 called，已标记 uncertain`)
+
   // 给她三个只读工具：按关键词找原话、按 ref 读全文、看自己现在的状态。
   guarded('记忆工具', () => registerMemoryTools({ ctx, store, observe }))
 
@@ -104,20 +109,7 @@ export function apply(ctx, config = {}) {
 
   const summarizeIfDue = (sessionId, ts) => {
     try {
-      // 不能按「总条数 % 12」触发：定时提醒只落她的回复（用户那条 source=schedule 被过滤）、
-      // 一次失败的回复、或 90 天归档，都会让总数跳过 12 的倍数，梗概从此再不生成。
-      // 改成「上次梗概之后累计的新原话 ≥12 条」——与总数奇偶、归档都无关。
-      const fresh = store.rawSince(store.lastSummaryTo())
-      if (fresh.length < 12) return
-      // 只摘最近 8 条之外的部分，最近的原话留给记忆包直接用。
-      const candidate = fresh.length > 8 ? fresh.slice(0, -8) : []
-      // 一次只压 12 条：summarizeTurns 总长 240 字，一次塞 40 多条只会被截成半句。
-      // 剩下的下次用户消息再压（每次一条梗概，逐步追上）。
-      const rows = candidate.slice(0, 12)
-      if (rows.length < 4) return
-      const text = summarizeTurns(rows)
-      if (!text) return
-      store.addSummary(ts, sessionId, text, rows[0].ts, rows[rows.length - 1].ts)
+      maybeSummarize({ store, sessionId, ts })
     } catch (error) {
       ctx.logger?.warn?.(`[jingjing] 写梗概失败：${error?.message || error}`)
     }

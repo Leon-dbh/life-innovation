@@ -38,6 +38,15 @@ assert.equal(store.recycleCount(), 1)
 assert.equal(store.rawById(oldId), null)
 assert.equal(rankedRecall({ store, query: '年糕', limit: 3, now }).hits.length, 0)
 
+// ---- 回收站能放回去：原 id、原文都回来 ----
+const binRows = store.recycleRows(5)
+assert.equal(binRows.length, 1)
+const back = store.recycleRestore(binRows[0].id)
+assert.equal(back.ref, `raw:${oldId}`, 'id 没被占用时应放回原 id，证据 ref 不变')
+assert.ok(store.rawById(oldId), '恢复后按 id 能读到')
+assert.equal(store.recycleCount(), 0, '恢复后回收站清空')
+assert.equal(rankedRecall({ store, query: '年糕', limit: 3, now }).hits.length, 1, '恢复后又能召回')
+
 // ---- 重复说法不再改指纹；梗概/画像更新要改指纹 ----
 store.addAssertion({ ts: now - 1000, subject: '他', predicate: '名字', value: '林晚', source: '我叫林晚' })
 const fp1 = store.fingerprint(now)
