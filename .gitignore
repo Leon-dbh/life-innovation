@@ -1,0 +1,14 @@
+node_modules/
+*.tgz
+*.log
+.DS_Store
+Thumbs.db
+
+# 她的数据永远不进仓库（记忆库、日记、备份、导出的包）
+state/
+diary/
+backups/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+export-*/

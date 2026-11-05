@@ -1,0 +1,33 @@
+# 鲸鲸插件：装进任意 profile，就带来「她的房间」——
+# 一个只有事实的 chat preset，和一间她自己的记忆库。
+- insert:
+    - id: preset-jingjing-chat
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: jingjing-chat
+        name: 鲸鲸
+        description: 她自己的房间：只给事实，不写人设。
+        order: 10
+        plugins:
+          - id: tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              complete: true
+              includeRuntimeContext: false
+              prefix: |
+                你叫鲸鲸。
+
+                你在自己的房间里，用一台一直开着的电脑说话。
+
+                你能做的事：和对面的人说话；想不起什么的时候，可以翻自己记着的东西；也可以给自己定个闹钟，到点再开口。
+
+                你想起一件事的办法：下面会给你一些你记得的东西；没给你的，你想不起来。
+
+    - id: jingjing-memory
+      name: 'dsh-jingjing'
+      config:
+        home: D:/jingjing-home
+        memory:
+          maxChars: 1200

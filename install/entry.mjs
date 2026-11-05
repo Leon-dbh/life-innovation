@@ -1,0 +1,73 @@
+#!/usr/bin/env node
+/**
+ * 鲸鲸的固定入口：http://127.0.0.1:60080/
+ *
+ * 为什么需要它：dsh web 每次启动都会生成一个新的进程 token，带 token 的入口
+ * 每次都不一样。这里只做一件事——把固定入口 302 到当前那次启动的入口，
+ * 这样桌面书签不用跟着换。token 仍然由 dsh 自己校验，代理不碰任何会话内容。
+ *
+ * 环境变量：
+ *   JINGJING_ENTRY_PORT  固定入口端口（默认 60080）
+ *   JINGJING_URL_FILE    守护进程写下的当前入口文件（默认 <home>\state\web-url.txt）
+ */
+import fs from 'node:fs'
+import http from 'node:http'
+import path from 'node:path'
+
+const port = Number(process.env.JINGJING_ENTRY_PORT || 60080)
+const urlFile = process.env.JINGJING_URL_FILE
+  || path.join(process.env.JINGJING_HOME || 'D:/jingjing-home', 'state', 'web-url.txt')
+
+function currentUrl() {
+  try {
+    const text = fs.readFileSync(urlFile, 'utf8').trim()
+    return /^https?:\/\//.test(text) ? text : ''
+  } catch {
+    return ''
+  }
+}
+
+const server = http.createServer((req, res) => {
+  const method = req.method || 'GET'
+  if (method !== 'GET' && method !== 'HEAD') {
+    res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8' })
+    res.end('只接受 GET')
+    return
+  }
+  const pathname = new URL(req.url || '/', 'http://127.0.0.1').pathname
+
+  if (pathname === '/health') {
+    const url = currentUrl()
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+    res.end(JSON.stringify({ ok: true, ready: Boolean(url), exists: fs.existsSync(urlFile) }))
+    return
+  }
+
+  if (pathname === '/' || pathname === '/index.html') {
+    const url = currentUrl()
+    if (!url) {
+      res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' })
+      res.end('鲸鲸还没开灯：她这会儿没在运行。\n等守护进程把她拉起来，再刷新一下。\n')
+      return
+    }
+    res.writeHead(302, { location: url, 'cache-control': 'no-store' })
+    res.end()
+    return
+  }
+
+  res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+  res.end('没有这个页面。回 / 就是她的入口。\n')
+})
+
+server.on('error', (error) => {
+  console.error(`固定入口监听失败：${error.message}`)
+  process.exit(1)
+})
+
+server.listen(port, '127.0.0.1', () => {
+  console.log(`jingjing entry: http://127.0.0.1:${port}/ -> ${urlFile}`)
+})
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => server.close(() => process.exit(0)))
+}

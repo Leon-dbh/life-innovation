@@ -1,0 +1,50 @@
+{
+  "name": "dsh-jingjing",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "鲸鲸：一个 DSH 插件（人格、记忆、真实生活线都在一个包里）",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "lib",
+    "tools",
+    "install"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "node tests/merge.test.mjs && node tests/memory.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/packcache.test.mjs && node tests/portability.test.mjs",
+    "pack": "npm pack",
+    "check": "node --check index.js && node --check lib/store.js && node --check lib/life.js"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "agent",
+    "memory",
+    "persona"
+  ],
+  "author": "鲸鲸 contributors",
+  "homepage": "https://github.com/OWNER/dsh-jingjing#readme",
+  "bugs": {
+    "url": "https://github.com/OWNER/dsh-jingjing/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/dsh-jingjing.git"
+  }
+}
