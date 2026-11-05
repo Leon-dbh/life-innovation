@@ -12,10 +12,10 @@
 
 ```powershell
 # 1) 克隆到任意目录
-git clone https://github.com/OWNER/dsh-jingjing.git D:	ools\dsh-jingjing
+git clone https://github.com/OWNER/dsh-jingjing.git D:/tools/dsh-jingjing
 
 # 2) 安装（会自动写 profile、装插件、注册每日备份）
-powershell -ExecutionPolicy Bypass -File D:	ools\dsh-jingjing\install\install.ps1 -Profile jingjing
+powershell -ExecutionPolicy Bypass -File D:/tools/dsh-jingjing/install/install.ps1 -Profile jingjing
 
 # 3) 打开固定入口（首次会 302 到带 token 的地址）
 start http://127.0.0.1:60080/
@@ -158,4 +158,5 @@ dsh plugin --profile jingjing add D:\path\dsh-jingjing-0.1.0.tgz
 ```
 
 - 离线包装的是同一份代码（`index.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`），不是另一套实现；`dsh --profile jingjing --dump-config` 能解析出 `preset-jingjing-chat` 与 `jingjing-memory`。
-- 真正 `npm publish` 需要一个能用的 scope：当前包名是 `dsh-jingjing`（`private: true`），只用于本机 link / 离线包。要发公共包，先改成自己的 scope（如 `@你的名字/dsh-jingjing`）并 `npm login`；本机目前 `npm whoami` 未登录，所以这一步没有代做。
+- `npm publish`：包名 `dsh-jingjing` 目前未被占用（2026-11-05 查 npm registry），`private` 已设为 `false`；登录后直接 `npm publish` 即可。作者本机 `npm whoami` 未登录，所以没有代发。
+- GitHub 上发布 Release 时，把 `npm pack` 出来的 `.tgz` 作为附件一起传，别人不装 Node 工具链也能下载。

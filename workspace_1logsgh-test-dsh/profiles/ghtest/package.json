@@ -1,0 +1,16 @@
+{
+  "name": "dsh-profile-ghtest",
+  "private": true,
+  "dependencies": {
+    "dsh-jingjing": "link:D:/workspace_1/plugins/dsh-jingjing"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "dsh-jingjing"
+      ]
+    }
+  }
+}
