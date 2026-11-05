@@ -13,7 +13,7 @@
 
 ```powershell
 # 1) 克隆到任意目录
-git clone https://github.com/OWNER/life-innovation.git D:/tools/life-innovation
+git clone https://github.com/Leon-dbh/life-innovation.git D:/tools/life-innovation
 
 # 2) 安装（会自动写 profile、装插件、注册每日备份）
 powershell -ExecutionPolicy Bypass -File D:/tools/life-innovation/install/install.ps1 -Profile jingjing
@@ -25,10 +25,10 @@ start http://127.0.0.1:60080/
 也可以直接让 DSH 从 git 装（不克隆）：
 
 ```powershell
-dsh plugin --profile jingjing add github:OWNER/life-innovation
+dsh plugin --profile jingjing add github:Leon-dbh/life-innovation
 ```
 
-装完把 `OWNER` 换成实际 GitHub 用户名即可。仓库根目录**就是**插件包，没有子包。
+仓库根目录**就是**插件包，没有子包。
 
 ## 十分钟装起来（M3）
 

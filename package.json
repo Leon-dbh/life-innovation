@@ -39,12 +39,12 @@
     "persona"
   ],
   "author": "鲸鲸 contributors",
-  "homepage": "https://github.com/OWNER/life-innovation#readme",
+  "homepage": "https://github.com/Leon-dbh/life-innovation#readme",
   "bugs": {
-    "url": "https://github.com/OWNER/life-innovation/issues"
+    "url": "https://github.com/Leon-dbh/life-innovation/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/life-innovation.git"
+    "url": "git+https://github.com/Leon-dbh/life-innovation.git"
   }
 }
