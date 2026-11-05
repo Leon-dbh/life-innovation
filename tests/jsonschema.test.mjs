@@ -74,8 +74,8 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jingjing-schema-'))
 const store = new MemoryStore(path.join(dir, 'schema.sqlite'))
 const registry = new Map()
 const ctx = { tools: { register: (def) => { registry.set(def.name, def); return () => registry.delete(def.name) } } }
-const dispose = registerMemoryTools({ ctx, store })
-assert.equal(registry.size, 4, '四个工具都要注册')
+const dispose = registerMemoryTools({ ctx, store, hands: {} })
+assert.equal(registry.size, 10, '十个工具都要注册')
 
 for (const [name, def] of registry) {
   assert.equal(typeof def.description, 'string')

@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { MemoryStore } from '../lib/store.js'
 import { registerMemoryTools } from '../lib/tools.js'
+import { createHands } from '../lib/hands.js'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jingjing-tools-'))
 const dbPath = path.join(dir, 'tools.sqlite')
@@ -21,8 +22,16 @@ store.addAction({ ts: now, sessionId: 's1', kind: 'file', tool: 'write_diary', s
 const registry = new Map()
 const ctx = { tools: { register: (def) => { registry.set(def.name, def); return () => registry.delete(def.name) } } }
 const observe = { snapshot: () => ({ packs: [{ chars: 520, cache: 'build', sections: [] }], recalls: [] }) }
-const dispose = registerMemoryTools({ ctx, store, observe })
-assert.deepEqual([...registry.keys()].sort(), ['jingjing_days', 'jingjing_status', 'memory_find', 'memory_read'])
+const hands = createHands({ home: dir, store, notifier: async () => ({ ok: true }) })
+const dispose = registerMemoryTools({ ctx, store, observe, hands })
+assert.deepEqual([...registry.keys()].sort(), ['book_next', 'jingjing_days', 'jingjing_status', 'lookup', 'memory_find', 'memory_read', 'note_write', 'notify', 'room_list', 'room_read'])
+
+const room = registry.get('room_list')
+const roomOut = await room.execute({ dir: 'diary' })
+assert.equal(roomOut.dir, 'diary')
+assert.ok(Array.isArray(roomOut.entries))
+const noteOut = await registry.get('note_write').execute({ title: '工具注册', body: '手接上了。' })
+assert.match(noteOut.ref, /^file:notes\//)
 
 const find = registry.get('memory_find')
 const out = await find.execute({ query: '西湖', limit: 20 })

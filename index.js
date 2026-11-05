@@ -13,6 +13,7 @@ import { createPackCache } from './lib/packCache.js'
 import { syncDay, tick } from './lib/life.js'
 import { reconcileOnStart, syncPhase, tickRhythm, rhythmText } from './lib/rhythm.js'
 import { registerMemoryTools } from './lib/tools.js'
+import { createHands } from './lib/hands.js'
 import { resolvePaths } from './lib/paths.js'
 import * as observe from './lib/observe.js'
 
@@ -48,7 +49,7 @@ function humanSource(message) {
 }
 
 export function apply(ctx, config = {}) {
-  const { dbPath, diaryDir } = resolvePaths(config)
+  const { home, dbPath, diaryDir } = resolvePaths(config)
   const maxChars = Number(config.memory?.maxChars || 1200)
   const tickMs = Number(config.diary?.tickMs || 60000)
 
@@ -86,8 +87,17 @@ export function apply(ctx, config = {}) {
     ctx.logger?.warn?.(`[jingjing] 节律对账失败：${error?.message || error}`)
   }
 
-  // 给她三个只读工具：按关键词找原话、按 ref 读全文、看自己现在的状态。
-  guarded('记忆工具', () => registerMemoryTools({ ctx, store, observe }))
+  // 六只手：读家里 / 写便签 / 读书 / 查资料 / 弹通知。建不起来就只少这几只手，
+  // 不影响记忆和节律。
+  let hands = null
+  try {
+    hands = createHands({ home, store, config: config.hand || {} })
+  } catch (error) {
+    ctx.logger?.warn?.(`[jingjing] 手没接上：${error?.message || error}`)
+  }
+
+  // 四个只读工具（回忆/读全文/状态/日子）+ 六只手。
+  guarded('记忆工具', () => registerMemoryTools({ ctx, store, observe, hands }))
 
   // 记忆块按指纹缓存：只有记忆真的变了才重建，保住系统提示词的前缀缓存。
   const packCache = createPackCache({ store, maxChars, subject: SUBJECT })
@@ -216,11 +226,20 @@ export function apply(ctx, config = {}) {
 
   // 每 60 秒看一眼：安静够久，她就真的把今天记成日记（落 actions，可审计）。
   // 顺手做一次很轻的归档维护：90 天前的原话搬到 raw_archive（id 不变，证据仍有效）。
-  const timer = setInterval(() => {
+  let lastWarm = 0
+  const timer = setInterval(async () => {
     try {
       const now = Date.now()
       store.archiveRawBefore(now - 90 * 86400000)
-      const rhythm = tickRhythm({ store, now, dir: diaryDir })
+      // 书只下一次：没有书时每 10 分钟试一次，下好了就只读本地。
+      if (hands && now - lastWarm > 10 * 60 * 1000) {
+        lastWarm = now
+        try { await hands.warm() } catch { /* 网络不好就下次再试 */ }
+      }
+      const rhythm = tickRhythm({
+        store, now, dir: diaryDir,
+        quietAction: hands ? () => hands.quietAction(now) : null,
+      })
       if (rhythm.closed) ctx.logger?.info?.(`[jingjing] 归档了 ${rhythm.closed.date}（${rhythm.closed.count} 件事）`)
       if (rhythm.dream) ctx.logger?.info?.(`[jingjing] 做了个梦（非事实层）`)
       const done = tick({ store, now, dir: diaryDir })

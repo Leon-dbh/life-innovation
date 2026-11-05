@@ -135,6 +135,22 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/jingjing.sqli
 
 状态注入在 `jingjing:rhythm`（order 850），每小时间刷新。
 
+## 手：她能碰到的六件事（M3.6）
+
+除了说话和回忆，她还有六只手，全部有边界、有额度、落动作账本：
+
+| 工具 | 用途 | 边界 |
+| --- | --- | --- |
+| `room_list` / `room_read` | 看/读自己家里的日记、便签、书 | 只读 `diary/`、`notes/`、`books/`；路径牢笼拒绝 `..`、盘符、符号链接逃逸 |
+| `note_write` | 写便签存进 `notes/` | 每天 3 张、每张 2000 字；同名不覆盖 |
+| `book_next` | 从 Project Gutenberg 读一段 | 固定四本公共领域书；每天 4 段；首次下载后只读本地 |
+| `lookup` | 查 Wikipedia 摘要 | 每天 3 次；只走 Wikipedia 域名；查不到就报查不到 |
+| `notify` | 弹一条 Windows 通知 | 每天 1 次、120 字；仅交互式桌面会话 |
+
+安静下来时，tick 会按「读一段本地书 → 翻昨天的日记 → 翻记忆」的顺序做一件真事，记进 `actions`，生活线里能看到“读了一段书”。
+
+注意：本机网络到 `zh.wikipedia.org` 不通，`lookup` 会如实返回“没连上”，不会用模型记忆冒充查询结果。
+
 ## 主动开口（M2.1）
 
 - preset 挂 `@deepseek-ai/dsh-tool-schedule`，她可自己定闹钟（`schedule_create/list/update/delete`）。
