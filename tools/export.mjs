@@ -3,9 +3,9 @@
  * 把她的一生存档导出成一个文件夹：记忆库 + 日记 + 清单。
  *
  * 用法：
- *   node tools/export.mjs --db D:/jingjing-home/state/jingjing.sqlite \
- *                         --data D:/jingjing-home \
- *                         --out D:/jingjing-home/backups/export-2026-11-05
+ *   node tools/export.mjs --db D:/life-innovation-home/state/life-innovation.sqlite \
+ *                         --data D:/life-innovation-home \
+ *                         --out D:/life-innovation-home/backups/export-2026-11-05
  *
  * 导出不锁死运行中的宿主：用 SQLite 的 VACUUM INTO 取一致快照（它自己会等读锁）。
  */
@@ -46,7 +46,7 @@ if (fs.existsSync(outDir) && fs.readdirSync(outDir).length > 0 && !args.force) {
 fs.mkdirSync(outDir, { recursive: true })
 
 // 1) 记忆库：VACUUM INTO 生成一致快照（不会把 -wal 拆开）。
-const snapshot = path.join(outDir, 'jingjing.sqlite')
+const snapshot = path.join(outDir, 'life-innovation.sqlite')
 if (fs.existsSync(snapshot)) fs.rmSync(snapshot)
 const source = new DatabaseSync(dbPath, { readOnly: true })
 source.exec('PRAGMA busy_timeout = 5000')
@@ -92,7 +92,8 @@ if (fs.existsSync(diarySrc)) {
 
 // 3) 清单：人看得懂，机器也校验得了。
 const manifest = {
-  format: 'jingjing-export/1',
+  format: 'life-innovation-export/1',
+  dbFile: path.basename(snapshot),
   exportedAt: new Date().toISOString(),
   exportedBy: process.env.USERNAME || process.env.USER || 'unknown',
   sourceDb: dbPath,

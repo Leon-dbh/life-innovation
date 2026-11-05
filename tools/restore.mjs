@@ -9,7 +9,7 @@
  * 用法：
  *   node tools/restore.mjs --list
  *   node tools/restore.mjs --id 3
- *   node tools/restore.mjs --db D:/jingjing-home/state/jingjing.sqlite --list
+ *   node tools/restore.mjs --db D:/life-innovation-home/state/life-innovation.sqlite --list
  */
 import fs from 'node:fs'
 import { resolvePaths } from '../lib/paths.js'

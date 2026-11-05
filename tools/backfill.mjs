@@ -4,7 +4,7 @@ import path from 'node:path'
 import { MemoryStore } from '../lib/store.js'
 import { extractAssertions } from '../lib/extract.js'
 
-const file = path.resolve(String(process.argv[2] || 'D:/jingjing-home/state/jingjing.sqlite'))
+const file = path.resolve(String(process.argv[2] || 'D:/life-innovation-home/state/life-innovation.sqlite'))
 const store = new MemoryStore(file)
 
 // 直接按「subject+predicate+value 且 valid_to IS NULL」查，不再用 liveAssertions(…,100)

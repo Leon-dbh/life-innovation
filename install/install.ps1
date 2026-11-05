@@ -1,23 +1,24 @@
 ﻿#requires -Version 5.1
 <#
 .SYNOPSIS
-  把鲸鲸装到一台干净的 Windows 机器上：建 profile、装插件、建数据目录、挂每日存档。
+  把 life-innovation 装到一台干净的 Windows 机器上：建 profile、装插件、建数据目录、挂每日存档。
 .DESCRIPTION
   只做四件事，全部幂等：写 profile（package.json / cordis.patch.yml）、装 life-innovation、
-  建她的家（state/diary/logs/backups）、注册每日存档任务。不改你已有的其他 profile。
+  建 agent 的家（state/diary/logs/backups）、注册每日存档任务。不改你已有的其他 profile。
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File install\install.ps1 -DryRun
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File install\install.ps1 -DataHome E:\jingjing-home
+  powershell -ExecutionPolicy Bypass -File install\install.ps1 -DataHome E:\life-innovation-home
 #>
 [CmdletBinding()]
 param(
-  [string]$DataHome = 'D:\jingjing-home',
+  [string]$DataHome = 'D:\life-innovation-home',
   [string]$DshHome = 'D:\dsh-home',
-  [string]$Profile = 'jingjing',
+  [string]$Profile = 'life-innovation',
   [int]$Port = 60081,
   [string]$PluginPath = '',
   [int]$EntryPort = 60080,
+  [string]$AgentName = '',
   [switch]$SkipPluginAdd,
   [switch]$NoService,
   [switch]$SkipBackupTask,
@@ -180,7 +181,8 @@ function Migrate-PatchFile([string]$path) {
   $orig = $text
   $text = $text -replace '@local/dsh-jingjing', 'life-innovation'
   $text = $text -replace 'dsh-jingjing', 'life-innovation'
-  $text = Set-MemoryOverride -text $text -homePath $DataFwd -appendIfMissing ($DataFwd -ne 'D:/jingjing-home')
+  $text = $text -replace 'default:\s*jingjing-chat', 'default: life-innovation'
+  $text = Set-MemoryOverride -text $text -homePath $DataFwd -appendIfMissing ($DataFwd -ne 'D:/life-innovation-home' -or $AgentName)
   if ($text -ne $orig) {
     $hadBom = Test-Utf8Bom $path
     Copy-Item -LiteralPath $path -Destination ("{0}.bak-{1}" -f $path, $Stamp)
@@ -197,7 +199,9 @@ $DshHome = $DshHome.TrimEnd('\')
 $DataFwd = $DataHome.Replace('\', '/')
 $PluginFwd = $PluginPath.Replace('\', '/')
 $ProfileDir = Join-Path $DshHome (Join-Path 'profiles' $Profile)
-$DbPath = Join-Path $DataHome 'state\jingjing.sqlite'
+$DbPath = Join-Path $DataHome 'state\life-innovation.sqlite'
+$LegacyDbPath = Join-Path $DataHome 'state\jingjing.sqlite'
+if (-not (Test-Path $DbPath) -and (Test-Path $LegacyDbPath)) { $DbPath = $LegacyDbPath }
 $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 
 Step "0. 环境检查"
@@ -228,7 +232,7 @@ if (-not (Test-Path (Join-Path $PluginPath 'package.json'))) {
 $apiKey = [Environment]::GetEnvironmentVariable('DEEPSEEK_API_KEY', 'User')
 if (-not $apiKey) { Warn '用户环境变量里没有 DEEPSEEK_API_KEY；启动后会连不上模型。' }
 
-Step "1. 建她的家：$DataHome"
+Step "1. 建 agent 的家：$DataHome"
 foreach ($sub in @('state', 'diary', 'logs', 'backups')) {
   $p = Join-Path $DataHome $sub
   if (Test-Path $p) { Info "已有 $sub" }
@@ -256,23 +260,26 @@ $pkg = @"
   }
 }
 "@
+$AgentNameYaml = $AgentName.Replace("'", "''")
 $memoryOverride = ''
-if ($DataFwd -ne 'D:/jingjing-home') {
+if ($DataFwd -ne 'D:/life-innovation-home' -or $AgentName) {
   $memoryOverride = @"
 
 - id: life-innovation
   name: 'life-innovation'
   config:
     home: $DataFwd
+    dbPath: $DbPath
+    agentName: $AgentNameYaml
 "@
 }
 $patch = @"
-# 鲸鲸的 profile 补丁层（由 install.ps1 生成）。
+# life-innovation 的 profile 补丁层（由 install.ps1 生成）。
 # 人格与记忆都住在 life-innovation 插件包里；这里只放环境相关的选择。
 - id: agent-preset-registry
   name: '@deepseek-ai/dsh-agent-preset-registry'
   config:
-    default: jingjing-chat
+    default: life-innovation
 
 - id: agent-default-model
   name: '@deepseek-ai/dsh-agent-default-model'
@@ -295,6 +302,7 @@ $memoryOverride
 "@
 $pkgExists = Test-Path $pkgPath
 $patchExists = Test-Path $patchPath
+if (-not $patch.EndsWith("`n")) { $patch += "`n" }
 if ($pkgExists -and -not $Force) {
   Info 'package.json 已存在，保留（要重写成全新状态加 -Force）'
   if ($DryRun) {
@@ -360,9 +368,9 @@ Run-If {
   [IO.File]::WriteAllText($backupPs1, $backupBody, (New-Object Text.UTF8Encoding($true)))
   $wrapper = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"%~dp0backup.ps1`"`r`n"
   [IO.File]::WriteAllText($backupCmd, $wrapper, [Text.Encoding]::ASCII)
-  & schtasks.exe /Create /F /SC DAILY /ST 03:30 /TN "JingjingDailyBackup" /TR "`"$backupCmd`"" | Out-Null
+  & schtasks.exe /Create /F /SC DAILY /ST 03:30 /TN "LifeInnovationDailyBackup" /TR "`"$backupCmd`"" | Out-Null
   if ($LASTEXITCODE -ne 0) { Warn "计划任务创建失败（退出码 $LASTEXITCODE）；可以手动把 $backupCmd 挂到任务计划程序。" }
-  else { Info '已注册计划任务 JingjingDailyBackup' }
+  else { Info '已注册计划任务 LifeInnovationDailyBackup' }
 }
 
 }
@@ -379,7 +387,7 @@ if ($NoService) {
 } else {
   if (-not (Test-Path $homeSrc)) { throw "缺少 $homeSrc——固定入口的 /home 页面需要它" }
   $svcText = Get-Content -Raw -Encoding UTF8 -Path $svcSrc
-  $svcText = $svcText.Replace('@DATA_HOME@', $DataHome).Replace('@DSH_HOME@', $DshHome).Replace('@PROFILE@', $Profile).Replace('@PORT@', [string]$Port).Replace('@ENTRY_PORT@', [string]$EntryPort)
+  $svcText = $svcText.Replace('@DATA_HOME@', $DataHome).Replace('@DSH_HOME@', $DshHome).Replace('@PROFILE@', $Profile).Replace('@PORT@', [string]$Port).Replace('@ENTRY_PORT@', [string]$EntryPort).Replace('@AGENT_NAME@', $AgentName)
   Run-If {
     New-Item -ItemType Directory -Force -Path $serviceDir | Out-Null
     [IO.File]::WriteAllText((Join-Path $serviceDir 'service.ps1'), $svcText, (New-Object Text.UTF8Encoding($true)))
@@ -388,8 +396,8 @@ if ($NoService) {
     $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
     $runValue = 'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $serviceDir 'service.ps1') + '"'
     New-Item -Path $runKey -Force | Out-Null
-    Set-ItemProperty -Path $runKey -Name 'JingjingService' -Value $runValue
-    Info '已登记开机自启：HKCU\...\Run\JingjingService（登录时启动，不需要管理员）'
+    Set-ItemProperty -Path $runKey -Name 'LifeInnovationService' -Value $runValue
+    Info '已登记开机自启：HKCU\...\Run\LifeInnovationService（登录时启动，不需要管理员）'
   }
   if ($StartService -and -not $DryRun) {
     $svcPath = Join-Path $serviceDir 'service.ps1'
@@ -404,7 +412,7 @@ Info "数据目录：$DataHome"
 Info "记忆库：$DbPath"
 Info "启动："
 Info "  `$env:DSH_HOME='$DshHome'; dsh --profile $Profile --port $Port --no-open"
-Info "  或让守护进程拉起：HKCU Run\JingjingService（登录时启动）"
+Info "  或让守护进程拉起：HKCU Run\LifeInnovationService（登录时启动）"
 Info "固定入口（书签用这个）：http://127.0.0.1:$EntryPort/"
 Info "  它 302 到这一次启动的带 token 地址；token 仍然由 dsh 自己校验。"
 Info "备份：$backupCmd（每天 03:30）"

@@ -3,9 +3,9 @@
  * 把另一台机器的记忆合并到现有记忆库（不覆盖）。
  *
  * 用法：
- *   node tools/merge.mjs --target D:/jingjing-home/state/jingjing.sqlite \
- *                        --source D:/backup/export-.../jingjing.sqlite \
- *                        [--data D:/jingjing-home] [--no-backup]
+ *   node tools/merge.mjs --target D:/life-innovation-home/state/life-innovation.sqlite \
+ *                        --source D:/backup/export-.../life-innovation.sqlite \
+ *                        [--data D:/life-innovation-home] [--no-backup]
  *
  * 合并前默认把目标库备份成 <target>.before-merge-<时间>；合并只增不删。
  */
@@ -44,7 +44,7 @@ if (!args.target || !args.source) {
 }
 // --data 不带值时 parseArgs 会记成 true，path.resolve 之后就成了一个叫 "true" 的目录。
 if (args.data === true) {
-  console.error('--data 需要跟一个目录，例如 --data D:/jingjing-home')
+  console.error('--data 需要跟一个目录，例如 --data D:/life-innovation-home')
   process.exit(2)
 }
 const target = path.resolve(String(args.target))

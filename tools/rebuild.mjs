@@ -46,7 +46,7 @@ if (args.limit !== null && args.limit !== undefined) {
   limit = n
 }
 
-const file = path.resolve(String(args.db || 'D:/jingjing-home/state/jingjing.sqlite'))
+const file = path.resolve(String(args.db || 'D:/life-innovation-home/state/life-innovation.sqlite'))
 const store = new MemoryStore(file)
 
 // 1) 备份：VACUUM INTO 是事务性快照，WAL 里已提交的数据也会进去。

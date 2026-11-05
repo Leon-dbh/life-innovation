@@ -1,6 +1,20 @@
 # Changelog
 
-> 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。鲸鲸是她的名字，不是插件的名字。
+> 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
+
+## 0.2.0 — 2026-11-05
+
+通用化：插件不替用户给 agent 起名。
+
+- **新增 `agentName` config**：设了就注入「你叫<名字>。」、页面标题「<名字>的家」、通知标题也用这个名字；不设就只有「你没有预设的名字；别人叫你什么，由对方决定」，页面标题是「家」。
+- **persona 去掉「你叫鲸鲸」**：名字不再是插件代码/预设的一部分。
+- 预设 id `preset-jingjing-chat` → `preset-life-innovation`，preset 名 `life-innovation`；上下文 `jingjing:*` → `life:*`。
+- 工具 `jingjing_status` → `life_status`，`jingjing_days` → `life_days`。
+- 默认数据目录 `D:/jingjing-home` → `D:/life-innovation-home`，默认库 `jingjing.sqlite` → `life-innovation.sqlite`；同目录旧库仍会自动兜底。
+- 环境变量改为 `LIFE_INNOVATION_*`；旧 `JINGJING_*` 保留兼容。
+- 安装脚本默认 `-Profile life-innovation`、`-DataHome D:\life-innovation-home`，新增 `-AgentName`；计划任务 `LifeInnovationDailyBackup`，自启键 `LifeInnovationService`。
+- `/home` 与 `client.js` 都从 config 取名字；README 改为通用说明。
+- 测试：17 个文件，新增名字/默认路径/旧库兜底/页面标题断言。
 
 ## 0.1.9 — 2026-11-05
 

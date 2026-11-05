@@ -325,11 +325,11 @@ function dreamBlock(dreams) {
   </div>`).join('')
 }
 
-function relationBlock(relation, name) {
+function relationBlock(relation, name, agentName = '') {
   if (!relation) return '<p class="empty">还没有关系记录。</p>'
   const who = name || '他'
   return `<div class="relation">
-    <div class="rel-name">${esc(who)} <span class="muted">与鲸鲸</span></div>
+    <div class="rel-name">${esc(who)} <span class="muted">与${esc(agentName || '你')}</span></div>
     <div class="rel-stage">${esc(relation.stage || '还没有阶段')}</div>
     <div class="muted">第一次说话 ${esc(clock(relation.first_seen))} · 已经聊过 ${Number(relation.turns) || 0} 轮</div>
   </div>`
@@ -345,12 +345,13 @@ function statsLine(stats) {
   ].map((x) => `<span>${esc(x)}</span>`).join('<i>·</i>')
 }
 
-export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '' }) {
+export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agentName = '' }) {
   const data = collectHome({ home, dbPath, now })
   const today = data.today
   const dayStart = Date.parse(`${today}T00:00:00+08:00`)
   const currentMeta = data.current ? (PHASE[data.current.phase] || { name: data.current.phase }) : null
   const name = data.name || '他'
+  const homeTitle = agentName ? `${agentName}的家` : '家'
   const chat = chatUrl
     ? `<a class="back" href="${esc(chatUrl)}">回她的房间 <span>→</span></a>`
     : '<span class="back muted">房间这会儿没开</span>'
@@ -402,7 +403,7 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '' }) {
         <section class="card">
           <div class="eyebrow">你们</div>
           <h2>关系</h2>
-          ${relationBlock(data.relation, data.name)}
+          ${relationBlock(data.relation, data.name, agentName)}
         </section>
       </div>
 
@@ -431,7 +432,7 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '' }) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>鲸鲸的家</title>
+<title>${esc(homeTitle)}</title>
 <style>
 :root { --ink:#f1ece2; --muted:#9a958c; --line:rgba(241,236,226,.12); --card:rgba(255,255,255,.035); --accent:#e4b07a; }
 * { box-sizing:border-box; }
@@ -515,7 +516,7 @@ footer { margin-top:26px; border-top:1px solid var(--line); padding-top:16px; di
   <header>
     <div>
       <div class="eyebrow">life-innovation · 只读</div>
-      <h1>鲸鲸的家</h1>
+      <h1>${esc(homeTitle)}</h1>
       <div class="sub">${esc(dateLabel(today))} · ${esc(clock(now))}</div>
     </div>
     ${chat}
@@ -527,14 +528,18 @@ footer { margin-top:26px; border-top:1px solid var(--line); padding-top:16px; di
 </html>`
 }
 
-export function renderHomeError(error) {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><title>鲸鲸的家</title>
+export function renderHomeError(error, agentName = '') {
+  const homeTitle = agentName ? `${agentName}的家` : '家'
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="color-scheme" content="dark"><title>${esc(homeTitle)}</title>
   <style>body{background:#0e1014;color:#f1ece2;font:15px/1.7 system-ui,"Microsoft YaHei",sans-serif;padding:12vh 8vw}h1{font-size:28px}code{color:#e4b07a}</style></head>
   <body><h1>她的家暂时没打开</h1><p>${esc(error)}</p><p>回固定入口 <code>/</code> 可以回到她的房间。</p></body></html>`
 }
 
 export function homeFilePath(home) {
-  return path.join(home, 'state', 'jingjing.sqlite')
+  const next = path.join(home, 'state', 'life-innovation.sqlite')
+  const legacy = path.join(home, 'state', 'jingjing.sqlite')
+  if (!fs.existsSync(next) && fs.existsSync(legacy)) return legacy
+  return next
 }
 
 export function homeDiaryDir(home) {

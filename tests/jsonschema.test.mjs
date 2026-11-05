@@ -88,7 +88,7 @@ for (const [name, def] of registry) {
 }
 
 // 真实地跑一遍输出校验的「形状」：status 的 null 字段必须能被 oneOf 接受。
-const status = registry.get('jingjing_status')
+const status = registry.get('life_status')
 const out = await status.execute({})
 assert.ok(out.stats && typeof out.stats.raw === 'number')
 for (const key of ['lastPack', 'lastRecall', 'relation']) {

@@ -1,9 +1,9 @@
 {
   "name": "life-innovation",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
-  "description": "给一个常驻 DSH agent 的记忆与真实生活线（人格、记忆、日子都在一个包里）",
+  "description": "给一个常驻 DSH agent 的记忆、真实生活线与只读的家；agent 的名字由使用者决定",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
@@ -49,7 +49,7 @@
     "memory",
     "persona"
   ],
-  "author": "鲸鲸 contributors",
+  "author": "life-innovation contributors",
   "homepage": "https://github.com/Leon-dbh/life-innovation#readme",
   "bugs": {
     "url": "https://github.com/Leon-dbh/life-innovation/issues"

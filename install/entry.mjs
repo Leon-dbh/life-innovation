@@ -1,27 +1,30 @@
 #!/usr/bin/env node
 /**
- * 鲸鲸的固定入口：http://127.0.0.1:60080/
+ * life-innovation 的固定入口：http://127.0.0.1:60080/
  *
  * 为什么需要它：dsh web 每次启动都会生成一个新的进程 token，带 token 的入口
  * 每次都不一样。这里只做一件事——把固定入口 302 到当前那次启动的入口，
  * 这样桌面书签不用跟着换。token 仍然由 dsh 自己校验，代理不碰任何会话内容。
  *
  * 环境变量：
- *   JINGJING_ENTRY_PORT  固定入口端口（默认 60080）
- *   JINGJING_URL_FILE    守护进程写下的当前入口文件（默认 <home>\state\web-url.txt）
+ *   LIFE_INNOVATION_ENTRY_PORT  固定入口端口（默认 60080）
+ *   LIFE_INNOVATION_URL_FILE    守护进程写下的当前入口文件（默认 <home>/state/web-url.txt）
+ *   LIFE_INNOVATION_AGENT_NAME  agent 的名字（可选，只用于页面标题）
  */
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { renderHome, renderHomeError, homeFilePath } from './home.mjs'
 
-const port = Number(process.env.JINGJING_ENTRY_PORT || 60080)
-const urlFile = process.env.JINGJING_URL_FILE
-  || path.join(process.env.JINGJING_HOME || 'D:/jingjing-home', 'state', 'web-url.txt')
+const port = Number(process.env.LIFE_INNOVATION_ENTRY_PORT || process.env.JINGJING_ENTRY_PORT || 60080)
+const homeEnv = process.env.LIFE_INNOVATION_HOME || process.env.JINGJING_HOME
+const urlFile = process.env.LIFE_INNOVATION_URL_FILE || process.env.JINGJING_URL_FILE
+  || path.join(homeEnv || 'D:/life-innovation-home', 'state', 'web-url.txt')
 // 家的位置优先看环境变量，其次从 state/web-url.txt 的上一级反推，
 // 这样即使 DataHome 不是默认目录，/home 也能找到同一套数据。
-const dataHome = process.env.JINGJING_HOME || path.dirname(path.dirname(urlFile))
-const dbFile = process.env.JINGJING_DB || homeFilePath(dataHome)
+const dataHome = homeEnv || path.dirname(path.dirname(urlFile))
+const dbFile = process.env.LIFE_INNOVATION_DB || process.env.JINGJING_DB || homeFilePath(dataHome)
+const agentName = String(process.env.LIFE_INNOVATION_AGENT_NAME || process.env.JINGJING_AGENT_NAME || '').trim()
 
 function currentUrl() {
   try {
@@ -64,6 +67,7 @@ const server = http.createServer((req, res) => {
         dbPath: dbFile,
         now: Date.now(),
         chatUrl: currentUrl(),
+        agentName,
       })
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
@@ -74,7 +78,7 @@ const server = http.createServer((req, res) => {
       res.end(html)
     } catch (error) {
       res.writeHead(503, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
-      res.end(renderHomeError(error && error.message ? error.message : String(error)))
+      res.end(renderHomeError(error && error.message ? error.message : String(error), agentName))
     }
     return
   }
@@ -83,7 +87,7 @@ const server = http.createServer((req, res) => {
     const url = currentUrl()
     if (!url) {
       res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' })
-      res.end('鲸鲸还没开灯：她这会儿没在运行。\n等守护进程把她拉起来，再刷新一下。\n')
+      res.end('还没开灯：agent 这会儿没在运行。\n等守护进程把它拉起来，再刷新一下。\n')
       return
     }
     res.writeHead(302, { location: url, 'cache-control': 'no-store' })
@@ -101,7 +105,7 @@ server.on('error', (error) => {
 })
 
 server.listen(port, '127.0.0.1', () => {
-  console.log(`jingjing entry: http://127.0.0.1:${port}/ -> ${urlFile}`)
+  console.log(`life-innovation entry: http://127.0.0.1:${port}/ -> ${urlFile}`)
 })
 
 for (const signal of ['SIGINT', 'SIGTERM']) {

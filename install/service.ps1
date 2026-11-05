@@ -1,4 +1,4 @@
-# 鲸鲸的守护进程（Windows，由登录时启动的 HKCU Run 键运行）。
+﻿# life-innovation 的守护进程（Windows，由登录时启动的 HKCU Run 键运行）。
 #
 # 它做四件事：
 #   1. 起一个固定入口 127.0.0.1:<EntryPort>，把请求 302 到当前这次启动的带 token 地址
@@ -19,6 +19,7 @@ $DshHome   = '@DSH_HOME@'
 $Profile   = '@PROFILE@'
 $Port      = '@PORT@'
 $EntryPort = '@ENTRY_PORT@'
+$AgentName = '@AGENT_NAME@'
 
 $state = Join-Path $DataHome 'state'
 $logs  = Join-Path $DataHome 'logs'
@@ -92,10 +93,19 @@ if (-not (Test-Path $npmCmd)) { $npmCmd = 'npm.cmd' }
 
 function Start-EntryProxy {
   if ($NoProxy -or -not (Test-Path $entryJs)) { return $null }
+  $dbPath = Join-Path $DataHome 'state\life-innovation.sqlite'
+  $legacyDb = Join-Path $DataHome 'state\jingjing.sqlite'
+  if (-not (Test-Path $dbPath) -and (Test-Path $legacyDb)) { $dbPath = $legacyDb }
+  $env:LIFE_INNOVATION_ENTRY_PORT = [string]$EntryPort
+  $env:LIFE_INNOVATION_URL_FILE = $urlFile
+  $env:LIFE_INNOVATION_HOME = $DataHome
+  $env:LIFE_INNOVATION_DB = $dbPath
+  $env:LIFE_INNOVATION_AGENT_NAME = $AgentName
+  # 兼容 0.1.x 的旧环境变量名
   $env:JINGJING_ENTRY_PORT = [string]$EntryPort
   $env:JINGJING_URL_FILE = $urlFile
   $env:JINGJING_HOME = $DataHome
-  $env:JINGJING_DB = Join-Path $DataHome 'state\jingjing.sqlite'
+  $env:JINGJING_DB = $dbPath
   $entryArg = '"' + $entryJs + '"'
   $p = Start-Process -FilePath $node -ArgumentList @($entryArg) -WorkingDirectory $DataHome -PassThru -WindowStyle Hidden
   Write-Log ('固定入口已启动：http://127.0.0.1:{0}/  (pid {1})' -f $EntryPort, $p.Id)

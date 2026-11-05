@@ -14,8 +14,8 @@ assert.ok(match, 'cordis.patch.yml 里应能找到 persona.prefix 块')
 const indent = Math.min(...match[1].split('\n').filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length))
 const prefix = match[1].split('\n').map((l) => l.slice(indent)).join('\n').trim()
 
-assert.ok(prefix.includes('你叫鲸鲸'), '名字是唯一允许的事实种子')
-assert.equal((prefix.match(/你叫鲸鲸/g) || []).length, 1, '名字只出现一次，不算重复强调')
+assert.ok(!prefix.includes('鲸鲸'), '插件不替用户给 agent 起名')
+assert.ok(!/你叫/.test(prefix), '名字由 config.agentName 动态注入，不写死在 persona')
 
 const forbidden = [
   '你是一个', '你不是', '性格', '脾气', '语气', '说话习惯', '句末', '台词',

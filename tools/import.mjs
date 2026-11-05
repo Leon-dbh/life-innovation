@@ -3,8 +3,8 @@
  * 把一份导出接回另一台机器（或同一个家换一个目录）。
  *
  * 用法：
- *   node tools/import.mjs --from <导出目录> --db D:/jingjing-home/state/jingjing.sqlite \
- *                         --data D:/jingjing-home [--force | --merge]
+ *   node tools/import.mjs --from <导出目录> --db D:/life-innovation-home/state/life-innovation.sqlite \
+ *                         --data D:/life-innovation-home [--force | --merge]
  *
  * 规矩：
  * - 目标库已存在时，默认拒绝（避免覆盖她现在的记忆）；先备份成 *.bak-<时间> 再换。
@@ -41,17 +41,19 @@ const dataHome = path.resolve(String(args.data || path.dirname(path.dirname(dbPa
 
 const manifestPath = path.join(fromDir, 'manifest.json')
 if (!fs.existsSync(manifestPath)) {
-  console.error(`这不是一份鲸鲸导出：缺少 ${manifestPath}`)
+  console.error(`这不是一份 life-innovation 导出：缺少 ${manifestPath}`)
   process.exit(3)
 }
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
-if (manifest.format !== 'jingjing-export/1') {
+if (manifest.format !== 'jingjing-export/1' && manifest.format !== 'life-innovation-export/1') {
   console.error(`不认识的导出版本：${manifest.format}`)
   process.exit(3)
 }
-const snapshot = path.join(fromDir, 'jingjing.sqlite')
-if (!fs.existsSync(snapshot)) {
-  console.error(`导出里没有记忆库：${snapshot}`)
+const dbFile = String(manifest.dbFile || 'life-innovation.sqlite')
+const candidates = [path.join(fromDir, dbFile), path.join(fromDir, 'life-innovation.sqlite'), path.join(fromDir, 'jingjing.sqlite')]
+const snapshot = candidates.find((p) => fs.existsSync(p))
+if (!snapshot) {
+  console.error(`导出里没有记忆库：${path.join(fromDir, dbFile)}`)
   process.exit(3)
 }
 

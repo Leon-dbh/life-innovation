@@ -1,5 +1,5 @@
 /**
- * 鲸鲸的宿主插件：把「她记得的事」在她说话前放回系统提示词。
+ * life-innovation 的宿主插件：把「她记得的事」在她说话前放回系统提示词。
  *
  * M1 的边界：
  * - 记忆是全局的（按人），不是按会话；换一个窗口，她还是她。
@@ -50,6 +50,7 @@ function humanSource(message) {
 
 export function apply(ctx, config = {}) {
   const { home, dbPath, diaryDir } = resolvePaths(config)
+  const agentName = String(config.agentName || '').trim()
   const maxChars = Number(config.memory?.maxChars || 1200)
   const tickMs = Number(config.diary?.tickMs || 60000)
 
@@ -57,8 +58,8 @@ export function apply(ctx, config = {}) {
   try {
     store = new MemoryStore(dbPath)
   } catch (error) {
-    console.error('[jingjing] 记忆库打不开，先不记忆：', error)
-    ctx.logger?.warn?.(`[jingjing] 记忆库打不开，先不记忆：${error?.message || error}`)
+    console.error('[life-innovation] 记忆库打不开，先不记忆：', error)
+    ctx.logger?.warn?.(`[life-innovation] 记忆库打不开，先不记忆：${error?.message || error}`)
     return
   }
 
@@ -68,8 +69,8 @@ export function apply(ctx, config = {}) {
     try {
       return fn()
     } catch (error) {
-      console.error(`[jingjing] ${label} 注册失败：`, error)
-      ctx.logger?.warn?.(`[jingjing] ${label} 注册失败：${error?.message || error}`)
+      console.error(`[life-innovation] ${label} 注册失败：`, error)
+      ctx.logger?.warn?.(`[life-innovation] ${label} 注册失败：${error?.message || error}`)
       return () => {}
     }
   })
@@ -78,22 +79,22 @@ export function apply(ctx, config = {}) {
 
   // 启动时上一进程遗留的「called」永远等不到结果了：标成 uncertain，不能算她做成了。
   const orphans = store.markOrphanActions()
-  if (orphans) ctx.logger?.warn?.(`[jingjing] 有 ${orphans} 条动作停在 called，已标记 uncertain`)
+  if (orphans) ctx.logger?.warn?.(`[life-innovation] 有 ${orphans} 条动作停在 called，已标记 uncertain`)
 
   // 启动时对账节律：上一个进程关掉之后的时间记成 offline，不补写她在干嘛。
   try {
     reconcileOnStart({ store, now: Date.now() })
   } catch (error) {
-    ctx.logger?.warn?.(`[jingjing] 节律对账失败：${error?.message || error}`)
+    ctx.logger?.warn?.(`[life-innovation] 节律对账失败：${error?.message || error}`)
   }
 
   // 六只手：读家里 / 写便签 / 读书 / 查资料 / 弹通知。建不起来就只少这几只手，
   // 不影响记忆和节律。
   let hands = null
   try {
-    hands = createHands({ home, store, config: config.hand || {} })
+    hands = createHands({ home, store, config: { ...(config.hand || {}), agentName } })
   } catch (error) {
-    ctx.logger?.warn?.(`[jingjing] 手没接上：${error?.message || error}`)
+    ctx.logger?.warn?.(`[life-innovation] 手没接上：${error?.message || error}`)
   }
 
   // 四个只读工具（回忆/读全文/状态/日子）+ 六只手。
@@ -102,7 +103,7 @@ export function apply(ctx, config = {}) {
   // 记忆块按指纹缓存：只有记忆真的变了才重建，保住系统提示词的前缀缓存。
   const packCache = createPackCache({ store, maxChars, subject: SUBJECT })
   guarded('记忆注入', () => ctx.systemPrompt.context({
-    name: 'jingjing:memory',
+    name: 'life:memory',
     order: 900,
     required: true,
     interpolate: false,
@@ -110,15 +111,25 @@ export function apply(ctx, config = {}) {
       try {
         return packCache.get(Date.now())
       } catch (error) {
-        ctx.logger?.warn?.(`[jingjing] 记忆包组装失败：${error?.message || error}`)
+        ctx.logger?.warn?.(`[life-innovation] 记忆包组装失败：${error?.message || error}`)
         return ''
       }
     },
   }))
 
+  // 名字不是插件给的：config.agentName 有值就注入；没有就明确说没有预设名字，
+  // 让用户自己决定怎么叫她，避免她凭空编一个。
+  guarded('名字注入', () => ctx.systemPrompt.context({
+    name: 'life:name',
+    order: 810,
+    required: true,
+    interpolate: false,
+    text: () => agentName ? `你叫${agentName}。` : '你没有预设的名字；别人叫你什么，由对方决定。',
+  }))
+
   // 真实的时间：日期与钟点不写死进 persona，按小时替换；不然她会以为自己还停在某一天。
   guarded('时间注入', () => ctx.systemPrompt.context({
-    name: 'jingjing:now',
+    name: 'life:now',
     order: 800,
     required: true,
     interpolate: false,
@@ -127,7 +138,7 @@ export function apply(ctx, config = {}) {
 
   // 当前节律：醒着/安静/夜里/今天已归档/没在运行。只由时钟和真实事件推导。
   guarded('节律注入', () => ctx.systemPrompt.context({
-    name: 'jingjing:rhythm',
+    name: 'life:rhythm',
     order: 850,
     required: true,
     interpolate: false,
@@ -135,7 +146,7 @@ export function apply(ctx, config = {}) {
       try {
         return rhythmText({ store, now: Date.now() })
       } catch (error) {
-        ctx.logger?.warn?.(`[jingjing] 节律文本失败：${error?.message || error}`)
+        ctx.logger?.warn?.(`[life-innovation] 节律文本失败：${error?.message || error}`)
         return ''
       }
     },
@@ -145,7 +156,7 @@ export function apply(ctx, config = {}) {
     try {
       maybeSummarize({ store, sessionId, ts })
     } catch (error) {
-      ctx.logger?.warn?.(`[jingjing] 写梗概失败：${error?.message || error}`)
+      ctx.logger?.warn?.(`[life-innovation] 写梗概失败：${error?.message || error}`)
     }
   }
 
@@ -223,7 +234,7 @@ export function apply(ctx, config = {}) {
         syncPhase({ store, now: ts })
       })
     } catch (error) {
-      ctx.logger?.warn?.(`[jingjing] 记这一轮失败：${error?.message || error}`)
+      ctx.logger?.warn?.(`[life-innovation] 记这一轮失败：${error?.message || error}`)
     }
   })
 
@@ -243,16 +254,16 @@ export function apply(ctx, config = {}) {
         store, now, dir: diaryDir,
         quietAction: hands ? () => hands.quietAction(now) : null,
       })
-      if (rhythm.closed) ctx.logger?.info?.(`[jingjing] 归档了 ${rhythm.closed.date}（${rhythm.closed.count} 件事）`)
-      if (rhythm.dream) ctx.logger?.info?.(`[jingjing] 做了个梦（非事实层）`)
+      if (rhythm.closed) ctx.logger?.info?.(`[life-innovation] 归档了 ${rhythm.closed.date}（${rhythm.closed.count} 件事）`)
+      if (rhythm.dream) ctx.logger?.info?.(`[life-innovation] 做了个梦（非事实层）`)
       const done = tick({ store, now, dir: diaryDir })
-      if (done) ctx.logger?.info?.(`[jingjing] 写了日记 ${done.file}`)
+      if (done) ctx.logger?.info?.(`[life-innovation] 写了日记 ${done.file}`)
     } catch (error) {
-      ctx.logger?.warn?.(`[jingjing] 节律/日记失败：${error?.message || error}`)
+      ctx.logger?.warn?.(`[life-innovation] 节律/日记失败：${error?.message || error}`)
     }
   }, tickMs)
   timer.unref?.()
   ctx.effect(() => () => clearInterval(timer))
 
-  ctx.logger?.info?.(`[jingjing] 记忆已开：${dbPath}`)
+  ctx.logger?.info?.(`[life-innovation] 记忆已开：${dbPath}`)
 }

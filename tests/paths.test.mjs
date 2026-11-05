@@ -10,11 +10,13 @@ assert.equal(normalizePath('D:/jingjing-home///'), 'D:/jingjing-home')
 // home 优先 config，其次环境变量，最后默认
 assert.equal(resolveHome({ home: 'E:' + BS + 'jj' }), 'E:/jj')
 assert.equal(resolveHome({}, { JINGJING_HOME: 'F:' + BS + 'x' }), 'F:/x')
-assert.equal(resolveHome({}, {}), 'D:/jingjing-home')
+assert.equal(resolveHome({}, {}), 'D:/life-innovation-home')
+assert.equal(resolveHome({}, { JINGJING_HOME: 'D:/legacy-home' }), 'D:/legacy-home')
+assert.equal(resolveHome({}, { LIFE_INNOVATION_HOME: 'D:/new-home' }), 'D:/new-home')
 
 // 记忆库与日记跟着家走；显式 dbPath 仍然优先
 const p = resolvePaths({ home: 'E:' + BS + 'jj' }, {})
-assert.equal(p.dbPath, 'E:/jj/state/jingjing.sqlite')
+assert.equal(p.dbPath, 'E:/jj/state/life-innovation.sqlite')
 assert.equal(p.diaryDir, 'E:/jj/diary')
 assert.equal(resolvePaths({ dbPath: 'X:/a/b.sqlite' }, {}).dbPath, 'X:/a/b.sqlite')
 assert.equal(resolvePaths({ diary: { dir: 'Y:' + BS + 'd' } }, {}).diaryDir, 'Y:/d')
