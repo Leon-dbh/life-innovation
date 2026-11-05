@@ -38,9 +38,11 @@ function contentText(message) {
     .trim()
 }
 
+// 只把真正由人发来的消息记成「他说的话」。运行时的上下文快照（runtime-context）、
+// 她自己触发的提醒（schedule）都不是他说的；未知来源一律不记，宁可漏记也不污染记忆。
 function humanSource(message) {
   const kind = message?.source?.kind
-  return kind === undefined || kind === null || kind === 'user' || kind === 'prompt'
+  return kind === 'user' || kind === 'prompt'
 }
 
 export function apply(ctx, config = {}) {
@@ -102,12 +104,16 @@ export function apply(ctx, config = {}) {
 
   const summarizeIfDue = (sessionId, ts) => {
     try {
-      const total = store.countRaw()
-      if (total === 0 || total % 12 !== 0) return
-      // 只摘「上次梗概之后、最近 8 条之外」的新原话；否则每次都会把旧原话重摘一遍，
-      // 梗概越滚越长、还互相覆盖。
+      // 不能按「总条数 % 12」触发：定时提醒只落她的回复（用户那条 source=schedule 被过滤）、
+      // 一次失败的回复、或 90 天归档，都会让总数跳过 12 的倍数，梗概从此再不生成。
+      // 改成「上次梗概之后累计的新原话 ≥12 条」——与总数奇偶、归档都无关。
       const fresh = store.rawSince(store.lastSummaryTo())
-      const rows = fresh.length > 8 ? fresh.slice(0, -8) : []
+      if (fresh.length < 12) return
+      // 只摘最近 8 条之外的部分，最近的原话留给记忆包直接用。
+      const candidate = fresh.length > 8 ? fresh.slice(0, -8) : []
+      // 一次只压 12 条：summarizeTurns 总长 240 字，一次塞 40 多条只会被截成半句。
+      // 剩下的下次用户消息再压（每次一条梗概，逐步追上）。
+      const rows = candidate.slice(0, 12)
       if (rows.length < 4) return
       const text = summarizeTurns(rows)
       if (!text) return
@@ -138,7 +144,14 @@ export function apply(ctx, config = {}) {
       }
       if (type === 'tool/result') {
         const data = event?.data || {}
-        const callId = String(data.callId || '')
+        // 真实事件形状：data 只有 {turn, step, message}，callId 在 message.toolCallId
+        // （以及 message.source.callId）。以前读 data.callId 恒为空，动作永远停在 called。
+        const callId = String(
+          data.callId
+          || data.message?.toolCallId
+          || data.message?.source?.callId
+          || '',
+        )
         if (callId) store.updateAction(callId, data?.message?.isError ? 'error' : 'ok')
         return
       }
