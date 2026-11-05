@@ -2,6 +2,11 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。鲸鲸是她的名字，不是插件的名字。
 
+## 0.1.6 — 2026-11-05
+
+- 修 `install.ps1` 生成的 `backup.ps1`：`$ErrorActionPreference` 从 `Stop` 改为 `Continue`。Node 的 SQLite ExperimentalWarning 写到 stderr 时，PowerShell 5.1 会抛 `NativeCommandError`，备份虽然已经导出成功，计划任务仍记为失败。
+- 备份任务路径回归验证：`backup.cmd` → `backup.ps1` → `tools/backup.mjs`，手动跑一次退出码 0，新存档 `export-2026-11-05-15-17-40`（132 KB，raw 73 / actions 24 / life_blocks 25）。
+
 ## 0.1.5 — 2026-11-05
 
 按第二轮独立 review（`review-life-innovation-93ad241.md`）修的 P1/P2/P3。

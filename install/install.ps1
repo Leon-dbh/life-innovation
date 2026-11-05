@@ -352,7 +352,7 @@ if ($SkipBackupTask) { Info '按参数跳过（不写 backup.cmd，也不注册�
 $nodePath = (Get-Command node).Source
 $backupPs1 = Join-Path $DataHome 'backup.ps1'
 $backupBody = @"
-`$ErrorActionPreference = 'Stop'
+`$ErrorActionPreference = 'Continue'
 & '$nodePath' '$PluginPath\tools\backup.mjs' --db '$DbPath' --data '$DataHome' --keep 14 *>> '$DataHome\logs\backup.log'
 exit `$LASTEXITCODE
 "@
