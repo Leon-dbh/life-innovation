@@ -347,12 +347,19 @@ if ($SkipPluginAdd) {
 Step "4. 每日存档（03:30，保留 14 份）"
 $backupCmd = Join-Path $DataHome 'backup.cmd'
 if ($SkipBackupTask) { Info '按参数跳过（不写 backup.cmd，也不注册计划任务）' } else {
+# .cmd 只留 ASCII：cmd.exe 按 OEM 代码页读批处理，中文路径会被解码成乱码。
+# 真正的备份逻辑放进 backup.ps1（PowerShell 按 UTF-8 BOM 读），cmd 只做转发。
+$nodePath = (Get-Command node).Source
+$backupPs1 = Join-Path $DataHome 'backup.ps1'
 $backupBody = @"
-@echo off
-"$((Get-Command node).Source)" "$PluginPath\tools\backup.mjs" --db "$DbPath" --data "$DataHome" --keep 14 >> "$DataHome\logs\backup.log" 2>&1
+`$ErrorActionPreference = 'Stop'
+& '$nodePath' '$PluginPath\tools\backup.mjs' --db '$DbPath' --data '$DataHome' --keep 14 *>> '$DataHome\logs\backup.log'
+exit `$LASTEXITCODE
 "@
 Run-If {
-  [IO.File]::WriteAllText($backupCmd, $backupBody, (New-Object System.Text.UTF8Encoding($true)))
+  [IO.File]::WriteAllText($backupPs1, $backupBody, (New-Object Text.UTF8Encoding($true)))
+  $wrapper = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"%~dp0backup.ps1`"`r`n"
+  [IO.File]::WriteAllText($backupCmd, $wrapper, [Text.Encoding]::ASCII)
   & schtasks.exe /Create /F /SC DAILY /ST 03:30 /TN "JingjingDailyBackup" /TR "`"$backupCmd`"" | Out-Null
   if ($LASTEXITCODE -ne 0) { Warn "计划任务创建失败（退出码 $LASTEXITCODE）；可以手动把 $backupCmd 挂到任务计划程序。" }
   else { Info '已注册计划任务 JingjingDailyBackup' }

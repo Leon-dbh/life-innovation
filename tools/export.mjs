@@ -58,7 +58,7 @@ source.close()
 const db = new DatabaseSync(snapshot, { readOnly: true })
 db.exec('PRAGMA busy_timeout = 5000')
 const counts = {}
-for (const table of ['raw_turns', 'assertions', 'profiles', 'relations', 'summaries', 'actions', 'life_blocks', 'outbox']) {
+for (const table of ['raw_turns', 'raw_archive', 'assertions', 'profiles', 'relations', 'summaries', 'actions', 'life_blocks', 'life_phases', 'dreams', 'recycle', 'books', 'outbox']) {
   try {
     counts[table] = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n
   } catch {

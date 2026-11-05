@@ -198,27 +198,30 @@ export function apply(ctx, config = {}) {
       const ts = Number(event?.time) || Date.now()
       const sessionId = String(session?.id || '')
 
-      if (type === 'user/message') {
-        if (!humanSource(message)) return
-        store.addRaw(ts, sessionId, 'user', text)
-        store.touchRelation(SUBJECT, ts)
-        store.expirePlans(ts, SUBJECT)
-        for (const item of extractAssertions(text, ts)) {
-          const res = store.addAssertion({ ts, subject: SUBJECT, predicate: item.predicate, value: item.value, source: text, dueAt: item.dueAt || null })
-          // 同一个说法重复出现时 addAssertion 不新建行；画像也不必重写，
-          // 否则 profiles.updated_at 每轮都变、指纹失效、记忆包每轮重建。
-          if (!item.predicate.startsWith('计划:') && res.id && !res.unchanged) {
-            store.setProfile(SUBJECT, item.predicate, item.value, text.slice(0, 120), ts)
+      // 原话、断言、画像、日子块必须一起落：中途崩了不能留下「话记住了、事实没记住」。
+      store.transaction(() => {
+        if (type === 'user/message') {
+          if (!humanSource(message)) return
+          store.addRaw(ts, sessionId, 'user', text)
+          store.touchRelation(SUBJECT, ts)
+          store.expirePlans(ts, SUBJECT)
+          for (const item of extractAssertions(text, ts)) {
+            const res = store.addAssertion({ ts, subject: SUBJECT, predicate: item.predicate, value: item.value, source: text, dueAt: item.dueAt || null })
+            // 同一个说法重复出现时 addAssertion 不新建行；画像也不必重写，
+            // 否则 profiles.updated_at 每轮都变、指纹失效、记忆包每轮重建。
+            if (!item.predicate.startsWith('计划:') && res.id && !res.unchanged) {
+              store.setProfile(SUBJECT, item.predicate, item.value, text.slice(0, 120), ts)
+            }
           }
+          summarizeIfDue(sessionId, ts)
+        } else {
+          store.addRaw(ts, sessionId, 'her', text)
         }
-        summarizeIfDue(sessionId, ts)
-      } else {
-        store.addRaw(ts, sessionId, 'her', text)
-      }
-      // 无论谁的句子，都重算今天的日子（幂等；只由真实原话/动作聚合）。
-      syncDay({ store, now: ts })
-      // 有人说话、或她刚回完，状态立刻切到醒着；其余状态由 60 秒 tick 推进。
-      syncPhase({ store, now: ts })
+        // 无论谁的句子，都重算今天的日子（幂等；只由真实原话/动作聚合）。
+        syncDay({ store, now: ts })
+        // 有人说话、或她刚回完，状态立刻切到醒着；其余状态由 60 秒 tick 推进。
+        syncPhase({ store, now: ts })
+      })
     } catch (error) {
       ctx.logger?.warn?.(`[jingjing] 记这一轮失败：${error?.message || error}`)
     }

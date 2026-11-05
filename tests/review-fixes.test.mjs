@@ -63,7 +63,8 @@ const now = Date.now()
   const block = store.lifeForDate('2026-11-06')[0]
   assert.deepEqual(block.evidence, [], '生活块证据里不能留着已删除的 raw 编号')
   const summary = store.recentSummaries(1)[0]
-  assert.equal(summary.toRawId, null, '梗概水位不能指向被删的原话')
+  // 水位不是外键：原话被回收后不能把水位清零，否则下一次摘要把旧原话再压一遍。
+  assert.equal(summary.toRawId, id, '梗概水位保持在被回收的那条原话上，不回退')
   store.close()
 }
 

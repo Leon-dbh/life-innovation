@@ -15,7 +15,8 @@ const findLivePredicate = store.db.prepare(`SELECT id, valid_from FROM assertion
   WHERE subject = ? AND predicate = ? AND valid_to IS NULL ORDER BY id DESC LIMIT 1`)
 
 let added = 0
-for (const row of store.recentRaw(1000)) {
+// 全量重放：活库 + 90 天前归档的原话都算，别让历史事实因为搬家而漏补。
+for (const row of store.allRaw()) {
   if (row.role !== 'user') continue
   for (const item of extractAssertions(row.text)) {
     // 已经有同 subject+predicate+value 的活断言：说明上次已经补过，跳过。

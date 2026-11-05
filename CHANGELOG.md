@@ -2,6 +2,20 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。鲸鲸是她的名字，不是插件的名字。
 
+## 0.1.5 — 2026-11-05
+
+按第二轮独立 review（`review-life-innovation-93ad241.md`）修的 P1/P2/P3。
+
+- **备份不再丢 WAL**：`import` / `merge` 的备份改用 `VACUUM INTO` 一致快照；恢复时清 `-wal/-shm`。以前 `.bak` 可能打开是空库，回滚会把记忆清掉。
+- **归档后的日记不再被 tick 重写**：`close_day` 之后当天冻结，`空档` 不再进“动作”。
+- **开机补归档**：08:00–23:00 启动也会扫最近 7 天，把前一天没关的日子补上。
+- **merge**：补 `life_phases/dreams/books`；更新说法按时间戳决定谁 live；归档同句不重复插；来源两表 id 冲突直接拒绝。
+- **记忆包指纹**：纳入当日最大原话 id，同一天新增的话也会刷新。
+- **23:00–24:00 的对话**：归档窗口延到次日 0 点前，不再两天都漏。
+- **手**：书单读完不重下；重定向逐跳验域名；通知异步；便签原子创建；安静读书同桶不推进书签；`listRoom` 校验目录 realpath。
+- **install**：备份拆成 ASCII `backup.cmd` + UTF-8 `backup.ps1`，中文 DataHome 不再被 OEM 解码弄坏。
+- 测试增至 16 个文件，新增 `tests/review2.test.mjs` 10 组回归。
+
 ## 0.1.4 — 2026-11-05
 
 - 新增六只手：`room_list` / `room_read`（只读白名单目录）、`note_write`（只写 `notes/`）、`book_next`（Gutenberg 四本公共领域书，按段读、记进度）、`lookup`（Wikipedia 摘要）、`notify`（Windows toast）。

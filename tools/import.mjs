@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { mergeDatabase } from '../lib/merge.js'
+import { snapshotDatabase, removeDbFiles, restoreDatabase } from '../lib/backup.js'
 
 function parseArgs(argv) {
   const out = {}
@@ -92,20 +93,25 @@ function verifyCounts(file, where) {
   return counts
 }
 
-function removeDbFiles(file) {
-  // 主库要和 -wal/-shm 一起删：只换主库会把旧日志留在原地，SQLite 下次打开会把它
-  // 当成本库的回滚日志，轻则 malformed、重则混入旧数据。
-  // 是否有进程正在使用这个库不在检查范围内——导入前请先停掉宿主。
-  for (const f of [file, `${file}-wal`, `${file}-shm`]) fs.rmSync(f, { force: true })
-}
-
 fs.mkdirSync(path.dirname(dbPath), { recursive: true })
+if (args.merge && !fs.existsSync(dbPath)) {
+  // 没有旧库就没有「合并」这回事，按首次导入处理；不能悄悄把 --merge 吞掉。
+  console.log('目标记忆库不存在，按首次导入处理（--merge 只在已有记忆时生效）')
+}
 if (fs.existsSync(dbPath) && args.merge) {
+  // 合并前也先验快照：坏包不能碰到现有库。
+  if (!verifyCounts(snapshot, '快照')) process.exit(5)
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const bak = dbPath + '.before-merge-' + stamp
-  fs.copyFileSync(dbPath, bak)
+  snapshotDatabase(dbPath, bak)
   console.log('已备份现有记忆库：' + bak)
-  const report = mergeDatabase({ targetPath: dbPath, sourcePath: snapshot })
+  let report
+  try {
+    report = mergeDatabase({ targetPath: dbPath, sourcePath: snapshot })
+  } catch (err) {
+    console.error('合并失败，现有记忆库没有改动：' + (err?.message || err))
+    process.exit(6)
+  }
   const diaryFrom = path.join(fromDir, 'diary')
   const diaryTo = path.join(dataHome, 'diary')
   let copied = 0
@@ -134,7 +140,7 @@ if (!verifyCounts(snapshot, '快照')) process.exit(5)
 const replacing = fs.existsSync(dbPath)
 if (replacing && !args.force) {
   console.error(`目标记忆库已存在：${dbPath}\n` +
-    '  这可能是她现在的记忆。要换掉就加 --force（会先备份）；想合并进现有记忆库，目前不支持。')
+    '  这可能是她现在的记忆。要换掉就加 --force（会先备份）；想合并进现有记忆库，加 --merge。')
   process.exit(4)
 }
 
@@ -143,18 +149,40 @@ let backup = null
 if (replacing) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   backup = `${dbPath}.bak-${stamp}`
-  fs.copyFileSync(dbPath, backup)
+  // WAL 里的最新事务也要进备份，否则回滚会回到一个更旧的空库。
+  snapshotDatabase(dbPath, backup)
   console.log(`已备份现有记忆库：${backup}`)
 }
+// 先复制到临时文件并校验，确认是完整库之后再动旧库；这样磁盘满/拷贝失败不会先把旧库删掉。
+const staged = `${dbPath}.importing-${process.pid}`
+try {
+  fs.copyFileSync(snapshot, staged)
+} catch (err) {
+  try { fs.rmSync(staged, { force: true }) } catch { /* ignore */ }
+  console.error('复制导入库失败，现有记忆库没有改动：' + (err?.message || err))
+  process.exit(6)
+}
+if (!verifyCounts(staged, '待替换库')) {
+  try { fs.rmSync(staged, { force: true }) } catch { /* ignore */ }
+  process.exit(5)
+}
 removeDbFiles(dbPath)
-fs.copyFileSync(snapshot, dbPath)
+try {
+  fs.renameSync(staged, dbPath)
+} catch (err) {
+  // 旧库已经删了但新库没就位：从导入前快照恢复，不能留下空目录。
+  try { fs.rmSync(staged, { force: true }) } catch { /* ignore */ }
+  if (backup) restoreDatabase(dbPath, backup)
+  console.error('替换记忆库失败' + (backup ? `，已恢复 ${backup}` : '') + '：' + (err?.message || err))
+  process.exit(6)
+}
 
-// 复制完再点一次；失败就回滚到导入前的备份，绝不留下半套库。
+// 替换完再点一次；失败就回滚到导入前的备份，绝不留下半套库。
 const counts = verifyCounts(dbPath, '导入后')
 if (!counts) {
   removeDbFiles(dbPath)
   if (backup) {
-    fs.copyFileSync(backup, dbPath)
+    restoreDatabase(dbPath, backup)
     console.error(`导入后校验失败，已恢复导入前的备份：${backup}`)
   } else {
     console.error('导入后校验失败，已删除未完成的库')

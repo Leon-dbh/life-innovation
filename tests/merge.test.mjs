@@ -69,7 +69,8 @@ assert.equal(report.raw_turns.fromArchive, 1)
 assert.equal(report.actions.added, 1)
 assert.equal(report.actions.skipped, 1)
 
-// 3) 断言：工作进来，住在上海作为历史留下并指向杭州那条。
+// 3) 断言：工作进来；住在上海的时间更晚（2100 > 1000），它才是「现在」，
+//    杭州那条降为历史并指向上海——不能因为杭州先写进目标库就让它一直 live。
 assert.equal(report.assertions.added, 2)
 assert.equal(report.assertions.demoted, 1)
 
@@ -77,12 +78,12 @@ const m = new MemoryStore(targetPath)
 const live = m.liveAssertions()
 assert.equal(live.length, 3)
 assert.equal(live.find((a) => a.predicate === '工作').value, '字节')
-assert.equal(live.find((a) => a.predicate === '住在').value, '杭州')
+assert.equal(live.find((a) => a.predicate === '住在').value, '上海')
 
-const shanghai = m.db.prepare("SELECT * FROM assertions WHERE predicate = '住在' AND value = '上海'").get()
-assert.ok(shanghai.valid_to, '上海那条应当被标成历史')
-const hangzhou = m.db.prepare("SELECT * FROM assertions WHERE predicate = '住在' AND value = '杭州' AND valid_to IS NULL").get()
-assert.equal(Number(shanghai.superseded_by), Number(hangzhou.id), '历史应当指向当前有效的那条')
+const hangzhou = m.db.prepare("SELECT * FROM assertions WHERE predicate = '住在' AND value = '杭州'").get()
+assert.ok(hangzhou.valid_to, '杭州那条应当被标成历史')
+const shanghai = m.db.prepare("SELECT * FROM assertions WHERE predicate = '住在' AND value = '上海' AND valid_to IS NULL").get()
+assert.equal(Number(hangzhou.superseded_by), Number(shanghai.id), '历史应当指向当前有效的那条')
 
 // 4) 合并进来的断言，source 必须指向合并后的真实原话。
 const workRow = m.db.prepare("SELECT * FROM assertions WHERE predicate = '工作' AND valid_to IS NULL").get()

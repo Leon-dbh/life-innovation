@@ -12,6 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { mergeDatabase } from '../lib/merge.js'
+import { snapshotDatabase } from '../lib/backup.js'
 
 /** 是否同一个文件：两边都先解析成绝对路径（存在时再解真实路径），再统一小写比较。 */
 function sameFile(a, b) {
@@ -64,7 +65,8 @@ if (sameFile(target, source)) {
 if (!args['no-backup']) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const bak = `${target}.before-merge-${stamp}`
-  fs.copyFileSync(target, bak)
+  // 活库的 WAL 里可能还有没落盘的事务，必须用 VACUUM INTO 取一致快照。
+  snapshotDatabase(target, bak)
   console.log(`已备份目标库：${bak}`)
 }
 
