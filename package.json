@@ -1,9 +1,9 @@
 {
-  "name": "dsh-jingjing",
+  "name": "life-innovation",
   "version": "0.1.0",
   "private": false,
   "type": "module",
-  "description": "鲸鲸：一个 DSH 插件（人格、记忆、真实生活线都在一个包里）",
+  "description": "给一个常驻 DSH agent 的记忆与真实生活线（人格、记忆、日子都在一个包里）",
   "main": "index.js",
   "exports": {
     ".": "./index.js"
@@ -39,12 +39,12 @@
     "persona"
   ],
   "author": "鲸鲸 contributors",
-  "homepage": "https://github.com/OWNER/dsh-jingjing#readme",
+  "homepage": "https://github.com/OWNER/life-innovation#readme",
   "bugs": {
-    "url": "https://github.com/OWNER/dsh-jingjing/issues"
+    "url": "https://github.com/OWNER/life-innovation/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER/dsh-jingjing.git"
+    "url": "git+https://github.com/OWNER/life-innovation.git"
   }
 }

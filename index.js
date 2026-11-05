@@ -15,7 +15,7 @@ import { registerMemoryTools } from './lib/tools.js'
 import { resolvePaths } from './lib/paths.js'
 import * as observe from './lib/observe.js'
 
-export const name = 'dsh-jingjing'
+export const name = 'life-innovation'
 
 export const inject = ['systemPrompt', 'tools']
 

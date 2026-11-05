@@ -1,21 +1,22 @@
-# dsh-jingjing
+# life-innovation
 
-> 鲸鲸 —— 一个装在 DSH 里的、有记忆和日子的人。
+> 一个装在 DSH 里的、有记忆和日子的人的房间。
 > 人格、记忆、生活线都在**这一个包**里；不是几个插件拼起来的。
+> `life-innovation` 是插件名；鲸鲸是住在里面的那个人的名字。
 
 [![powered by dsh](https://img.shields.io/badge/powered%20by-dsh-4b6bfb)](https://github.com/deepseek-ai/deepseek-harness)
 
 
-鲸鲸的 DSH 插件。一个包：她的房间（chat preset）、她的记忆（M1）、她的日子（M2）。
+一个包：她的房间（chat preset）、她的记忆（M1）、她的日子（M2）。
 
 ## 从 GitHub 安装（推荐）
 
 ```powershell
 # 1) 克隆到任意目录
-git clone https://github.com/OWNER/dsh-jingjing.git D:/tools/dsh-jingjing
+git clone https://github.com/OWNER/life-innovation.git D:/tools/life-innovation
 
 # 2) 安装（会自动写 profile、装插件、注册每日备份）
-powershell -ExecutionPolicy Bypass -File D:/tools/dsh-jingjing/install/install.ps1 -Profile jingjing
+powershell -ExecutionPolicy Bypass -File D:/tools/life-innovation/install/install.ps1 -Profile jingjing
 
 # 3) 打开固定入口（首次会 302 到带 token 的地址）
 start http://127.0.0.1:60080/
@@ -24,7 +25,7 @@ start http://127.0.0.1:60080/
 也可以直接让 DSH 从 git 装（不克隆）：
 
 ```powershell
-dsh plugin --profile jingjing add github:OWNER/dsh-jingjing
+dsh plugin --profile jingjing add github:OWNER/life-innovation
 ```
 
 装完把 `OWNER` 换成实际 GitHub 用户名即可。仓库根目录**就是**插件包，没有子包。
@@ -41,7 +42,7 @@ powershell -ExecutionPolicy Bypass -File install\install.ps1
 
 1. 检查 node/npm/pnpm 与 API key；
 2. 建 `D:\jingjing-home\{state,diary,logs,backups}`；
-3. 在 `%DSH_HOME%\profiles\jingjing` 写 `package.json`（bundle 带 `dsh-jingjing`）与 `cordis.patch.yml`（默认 preset、模型、关掉 `working_directory`）；
+3. 在 `%DSH_HOME%\profiles\jingjing` 写 `package.json`（bundle 带 `life-innovation`）与 `cordis.patch.yml`（默认 preset、模型、关掉 `working_directory`）；
 4. `dsh plugin --profile jingjing add <本插件>`；
 5. 注册计划任务 `JingjingDailyBackup`（每天 03:30 存档，留 14 份）。
 
@@ -56,7 +57,7 @@ dsh --profile jingjing --port 60081 --no-open
 
 日志里那行 `dsh web: http://127.0.0.1:60081/?token=…` 才是入口（裸 `/` 会 401）。进去后选 `jingjing-home` 工作区，新建会话；第一句可以问「你叫什么」。
 
-手动装（不跑脚本）：`dsh plugin --profile jingjing add D:/workspace_1/plugins/dsh-jingjing`。
+手动装（不跑脚本）：`dsh plugin --profile jingjing add D:/workspace_1/plugins/life-innovation`。
 
 ## 她的家（M3）
 
@@ -160,12 +161,12 @@ powershell -ExecutionPolicy Bypass -File install\install.ps1 -StartService
 
 ```powershell
 # 在插件目录打包
-npm pack     # 得到 dsh-jingjing-0.1.0.tgz
+npm pack     # 得到 life-innovation-0.1.0.tgz
 
 # 在另一台机器上（先建好 profile，或跑 install.ps1 -SkipPluginAdd）
-dsh plugin --profile jingjing add D:\path\dsh-jingjing-0.1.0.tgz
+dsh plugin --profile jingjing add D:\path\life-innovation-0.1.0.tgz
 ```
 
-- 离线包装的是同一份代码（`index.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`），不是另一套实现；`dsh --profile jingjing --dump-config` 能解析出 `preset-jingjing-chat` 与 `jingjing-memory`。
-- `npm publish`：包名 `dsh-jingjing` 目前未被占用（2026-11-05 查 npm registry），`private` 已设为 `false`；登录后直接 `npm publish` 即可。作者本机 `npm whoami` 未登录，所以没有代发。
+- 离线包装的是同一份代码（`index.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`），不是另一套实现；`dsh --profile jingjing --dump-config` 能解析出 `preset-jingjing-chat` 与 `life-innovation`。
+- `npm publish`：包名 `life-innovation` 目前未被占用（2026-11-05 查 npm registry），`private` 已设为 `false`；登录后直接 `npm publish` 即可。作者本机 `npm whoami` 未登录，所以没有代发。
 - GitHub 上发布 Release 时，把 `npm pack` 出来的 `.tgz` 作为附件一起传，别人不装 Node 工具链也能下载。

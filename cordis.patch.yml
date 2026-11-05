@@ -25,8 +25,8 @@
 
                 你想起一件事的办法：下面会给你一些你记得的东西；没给你的，你想不起来。
 
-    - id: jingjing-memory
-      name: 'dsh-jingjing'
+    - id: life-innovation
+      name: 'life-innovation'
       config:
         home: D:/jingjing-home
         memory:

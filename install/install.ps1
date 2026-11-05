@@ -3,7 +3,7 @@
 .SYNOPSIS
   把鲸鲸装到一台干净的 Windows 机器上：建 profile、装插件、建数据目录、挂每日存档。
 .DESCRIPTION
-  只做四件事，全部幂等：写 profile（package.json / cordis.patch.yml）、装 dsh-jingjing、
+  只做四件事，全部幂等：写 profile（package.json / cordis.patch.yml）、装 life-innovation、
   建她的家（state/diary/logs/backups）、注册每日存档任务。不改你已有的其他 profile。
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File install\install.ps1 -DryRun
@@ -90,14 +90,14 @@ $pkg = @"
   "name": "dsh-profile-$Profile",
   "private": true,
   "dependencies": {
-    "dsh-jingjing": "link:$PluginFwd"
+    "life-innovation": "link:$PluginFwd"
   },
   "dsh": {
     "profile": {
       "bundles": [
         "@deepseek-ai/dsh-base",
         "@deepseek-ai/dsh-web-app",
-        "dsh-jingjing"
+        "life-innovation"
       ]
     }
   }
@@ -107,15 +107,15 @@ $memoryOverride = ''
 if ($DataFwd -ne 'D:/jingjing-home') {
   $memoryOverride = @"
 
-- id: jingjing-memory
-  name: 'dsh-jingjing'
+- id: life-innovation
+  name: 'life-innovation'
   config:
     home: $DataFwd
 "@
 }
 $patch = @"
 # 鲸鲸的 profile 补丁层（由 install.ps1 生成）。
-# 人格与记忆都住在 dsh-jingjing 插件包里；这里只放环境相关的选择。
+# 人格与记忆都住在 life-innovation 插件包里；这里只放环境相关的选择。
 - id: agent-preset-registry
   name: '@deepseek-ai/dsh-agent-preset-registry'
   config:
@@ -160,7 +160,7 @@ if ((Test-Path $patchPath) -and -not $Force) {
   if (-not $DryRun) { Info '写 cordis.patch.yml' } else { Info '(dry-run) 将写 cordis.patch.yml' }
 }
 
-Step "3. 装插件 dsh-jingjing"
+Step "3. 装插件 life-innovation"
 if ($SkipPluginAdd) {
   Info '按参数跳过（package.json 里已写好 link，启动时会解析）'
 } elseif ($DryRun) {
