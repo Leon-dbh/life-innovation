@@ -88,7 +88,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/jingjing.sqli
 
 会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`，点开就是同一页。
 
-页面只列「今天」；最近七天用她的 `jingjing_days` 工具。如果安装时改了 `-EntryPort`，`client.js` 里默认的 `60080` 也要同步改。
+页面只列「今天」；最近七天用她的 `jingjing_days` 工具。页面默认读 `<home>/state/jingjing.sqlite`；如果在插件 config 里显式改了 `dbPath`，用 `JINGJING_DB` 环境变量指向同一个库。如果安装时改了 `-EntryPort`，`client.js` 里默认的 `60080` 也要同步改。
 
 
 ## 记忆（M1）

@@ -21,6 +21,7 @@ const urlFile = process.env.JINGJING_URL_FILE
 // 家的位置优先看环境变量，其次从 state/web-url.txt 的上一级反推，
 // 这样即使 DataHome 不是默认目录，/home 也能找到同一套数据。
 const dataHome = process.env.JINGJING_HOME || path.dirname(path.dirname(urlFile))
+const dbFile = process.env.JINGJING_DB || homeFilePath(dataHome)
 
 function currentUrl() {
   try {
@@ -60,7 +61,7 @@ const server = http.createServer((req, res) => {
     try {
       const html = renderHome({
         home: dataHome,
-        dbPath: homeFilePath(dataHome),
+        dbPath: dbFile,
         now: Date.now(),
         chatUrl: currentUrl(),
       })

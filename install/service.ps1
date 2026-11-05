@@ -95,6 +95,7 @@ function Start-EntryProxy {
   $env:JINGJING_ENTRY_PORT = [string]$EntryPort
   $env:JINGJING_URL_FILE = $urlFile
   $env:JINGJING_HOME = $DataHome
+  $env:JINGJING_DB = Join-Path $DataHome 'state\jingjing.sqlite'
   $entryArg = '"' + $entryJs + '"'
   $p = Start-Process -FilePath $node -ArgumentList @($entryArg) -WorkingDirectory $DataHome -PassThru -WindowStyle Hidden
   Write-Log ('固定入口已启动：http://127.0.0.1:{0}/  (pid {1})' -f $EntryPort, $p.Id)
