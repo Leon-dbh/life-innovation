@@ -48,8 +48,13 @@ function clock(ts) {
 
 function dateLabel(date) {
   const d = new Date(`${date}T00:00:00+08:00`)
-  const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: TZ, weekday: 'long' }).format(d)
-  return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日 · ${weekday}`
+  // 不用 getFullYear()/getMonth()：它们取的是服务器本地时区，
+  // 在 UTC 机器上会把 11 月 6 日显示成 11 月 5 日。这里固定按上海时区取。
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: TZ, year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'long',
+  }).formatToParts(d)
+  const pick = (type) => parts.find((x) => x.type === type)?.value || ''
+  return `${pick('year')} 年 ${pick('month')} 月 ${pick('day')} 日 · ${pick('weekday')}`
 }
 
 function evidenceList(raw) {

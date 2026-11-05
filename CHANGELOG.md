@@ -2,6 +2,11 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。鲸鲸是她的名字，不是插件的名字。
 
+## 0.1.9 — 2026-11-05
+
+- 修复 `/home` 日期标签在非中国时区服务器上晚一天：`dateLabel` 改用 `Intl.DateTimeFormat(...).formatToParts` 固定按 Asia/Shanghai 取年月日。
+- CI 的 unit tests 在 Ubuntu UTC 上因此失败；补跑 `TZ=UTC npm test` 全绿。
+
 ## 0.1.8 — 2026-11-05
 
 - `/home` 支持 `JINGJING_DB` 环境变量：插件 config 显式改 `dbPath` 时，页面不会再去读默认库。
