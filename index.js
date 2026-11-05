@@ -12,6 +12,7 @@ import { createPackCache } from './lib/packCache.js'
 import { syncDay, tick } from './lib/life.js'
 import { registerMemoryTools } from './lib/tools.js'
 import { resolvePaths } from './lib/paths.js'
+import * as observe from './lib/observe.js'
 
 export const name = 'dsh-jingjing'
 
@@ -51,18 +52,31 @@ export function apply(ctx, config = {}) {
   try {
     store = new MemoryStore(dbPath)
   } catch (error) {
+    console.error('[jingjing] 记忆库打不开，先不记忆：', error)
     ctx.logger?.warn?.(`[jingjing] 记忆库打不开，先不记忆：${error?.message || error}`)
     return
   }
 
+  // 每个 effect 都单独兜住：宿主对工具 schema 等有校验，注册失败如果直接抛，
+  // 同一个 apply 里后面的记忆段也会一起丢掉，而且错误会被吞掉（看起来像插件没加载）。
+  const guarded = (label, fn) => ctx.effect(() => {
+    try {
+      return fn()
+    } catch (error) {
+      console.error(`[jingjing] ${label} 注册失败：`, error)
+      ctx.logger?.warn?.(`[jingjing] ${label} 注册失败：${error?.message || error}`)
+      return () => {}
+    }
+  })
+
   ctx.effect(() => () => store.close())
 
-  // 给她两个只读的回读工具：按关键词找原话、按 ref 读全文。
-  ctx.effect(() => registerMemoryTools({ ctx, store }))
+  // 给她三个只读工具：按关键词找原话、按 ref 读全文、看自己现在的状态。
+  guarded('记忆工具', () => registerMemoryTools({ ctx, store, observe }))
 
   // 记忆块按指纹缓存：只有记忆真的变了才重建，保住系统提示词的前缀缓存。
   const packCache = createPackCache({ store, maxChars, subject: SUBJECT })
-  ctx.effect(() => ctx.systemPrompt.context({
+  guarded('记忆注入', () => ctx.systemPrompt.context({
     name: 'jingjing:memory',
     order: 900,
     required: true,
@@ -78,7 +92,7 @@ export function apply(ctx, config = {}) {
   }))
 
   // 真实的时间：日期与钟点不写死进 persona，按小时替换；不然她会以为自己还停在某一天。
-  ctx.effect(() => ctx.systemPrompt.context({
+  guarded('时间注入', () => ctx.systemPrompt.context({
     name: 'jingjing:now',
     order: 800,
     required: true,
@@ -90,7 +104,10 @@ export function apply(ctx, config = {}) {
     try {
       const total = store.countRaw()
       if (total === 0 || total % 12 !== 0) return
-      const rows = store.rawForSummary(8)
+      // 只摘「上次梗概之后、最近 8 条之外」的新原话；否则每次都会把旧原话重摘一遍，
+      // 梗概越滚越长、还互相覆盖。
+      const fresh = store.rawSince(store.lastSummaryTo())
+      const rows = fresh.length > 8 ? fresh.slice(0, -8) : []
       if (rows.length < 4) return
       const text = summarizeTurns(rows)
       if (!text) return
@@ -105,7 +122,9 @@ export function apply(ctx, config = {}) {
       const type = event?.type
       if (type === 'tool/call') {
         const call = event?.data || {}
-        const args = String(call.arguments || '').replace(/\s+/g, ' ').slice(0, 120)
+        const rawArgs = call.arguments
+        const argsText = typeof rawArgs === 'string' ? rawArgs : (rawArgs ? JSON.stringify(rawArgs) : '')
+        const args = argsText.replace(/\s+/g, ' ').slice(0, 120)
         store.addAction({
           ts: Number(event?.time) || Date.now(),
           sessionId: String(session?.id || ''),
@@ -136,9 +155,11 @@ export function apply(ctx, config = {}) {
         store.addRaw(ts, sessionId, 'user', text)
         store.touchRelation(SUBJECT, ts)
         store.expirePlans(ts, SUBJECT)
-        for (const item of extractAssertions(text)) {
-          const { id } = store.addAssertion({ ts, subject: SUBJECT, predicate: item.predicate, value: item.value, source: text, dueAt: item.dueAt || null })
-          if (!item.predicate.startsWith('计划:') && id) {
+        for (const item of extractAssertions(text, ts)) {
+          const res = store.addAssertion({ ts, subject: SUBJECT, predicate: item.predicate, value: item.value, source: text, dueAt: item.dueAt || null })
+          // 同一个说法重复出现时 addAssertion 不新建行；画像也不必重写，
+          // 否则 profiles.updated_at 每轮都变、指纹失效、记忆包每轮重建。
+          if (!item.predicate.startsWith('计划:') && res.id && !res.unchanged) {
             store.setProfile(SUBJECT, item.predicate, item.value, text.slice(0, 120), ts)
           }
         }
@@ -154,8 +175,10 @@ export function apply(ctx, config = {}) {
   })
 
   // 每 60 秒看一眼：安静够久，她就真的把今天记成日记（落 actions，可审计）。
+  // 顺手做一次很轻的归档维护：90 天前的原话搬到 raw_archive（id 不变，证据仍有效）。
   const timer = setInterval(() => {
     try {
+      store.archiveRawBefore(Date.now() - 90 * 86400000)
       const done = tick({ store, now: Date.now(), dir: diaryDir })
       if (done) ctx.logger?.info?.(`[jingjing] 写了日记 ${done.file}`)
     } catch (error) {

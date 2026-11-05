@@ -22,7 +22,7 @@
     }
   },
   "scripts": {
-    "test": "node tests/merge.test.mjs && node tests/memory.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/packcache.test.mjs && node tests/portability.test.mjs",
+    "test": "node tests/memory.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/packcache.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/portability.test.mjs && node tests/merge.test.mjs && node tests/lifecycle.test.mjs && node tests/jsonschema.test.mjs",
     "pack": "npm pack",
     "check": "node --check index.js && node --check lib/store.js && node --check lib/life.js"
   },

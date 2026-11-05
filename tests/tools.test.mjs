@@ -14,18 +14,28 @@ const long = '这是一段很长的原话，'.repeat(40)
 for (let i = 1; i <= 10; i += 1) {
   store.addRaw(now - (10 - i) * 60000, 's1', i % 2 ? 'user' : 'assistant', i === 5 ? long : `第 ${i} 句话：我们去过西湖，聊了工作`)
 }
+// 旧但高相关：一年前说过一次「失去味觉」，最近十句都在闲聊西湖。
+store.addRaw(now - 365 * 86400000, 's0', 'user', '去年生病的时候失去了味觉，吃什么都没味道')
 store.addAction({ ts: now, sessionId: 's1', kind: 'file', tool: 'write_diary', summary: '把今天记成日记', callId: 'diary:x', status: 'ok' })
 
 const registry = new Map()
 const ctx = { tools: { register: (def) => { registry.set(def.name, def); return () => registry.delete(def.name) } } }
-const dispose = registerMemoryTools({ ctx, store })
-assert.deepEqual([...registry.keys()].sort(), ['memory_find', 'memory_read'])
+const observe = { snapshot: () => ({ packs: [{ chars: 520, cache: 'build', sections: [] }], recalls: [] }) }
+const dispose = registerMemoryTools({ ctx, store, observe })
+assert.deepEqual([...registry.keys()].sort(), ['jingjing_status', 'memory_find', 'memory_read'])
 
 const find = registry.get('memory_find')
 const out = await find.execute({ query: '西湖', limit: 20 })
 assert.equal(out.hits.length, 8, 'memory_find 最多 8 条')
 assert.ok(out.hits.every((h) => h.text.length <= 200), '每条 <= 200 字')
 assert.ok(out.hits.every((h) => /^raw:\d+$/.test(h.ref)))
+assert.ok(out.recall.terms.length > 0, '召回带词面')
+assert.ok(out.hits.every((h) => typeof h.score === 'number' && h.why.length > 0), '每条带分数与理由')
+
+// 稀有词 + 旧事：词面强的旧原话要排在新闲聊前面，而不是被时间倒序埋掉。
+const rare = await find.execute({ query: '味觉', limit: 3 })
+assert.match(rare.hits[0].text, /味觉/, '稀有词命中应排第一')
+assert.ok(rare.hits[0].score > 0)
 
 const read = registry.get('memory_read')
 const big = out.hits.find((h) => h.text.endsWith('…')) || out.hits[0]
@@ -40,8 +50,15 @@ assert.match(act.who, /动作/)
 const bad = await read.execute({ ref: 'nope' })
 assert.match(bad.text, /看不懂/)
 
+const status = registry.get('jingjing_status')
+const st = await status.execute({})
+assert.equal(st.stats.raw, 11)
+assert.equal(st.stats.recycle, 0)
+assert.equal(st.lastPack.chars, 520)
+assert.equal(st.stats.actions, 1)
+
 dispose()
 assert.equal(registry.size, 0)
 store.close()
 fs.rmSync(dir, { recursive: true, force: true })
-console.log('OK: memory_find / memory_read')
+console.log('OK: memory_find / memory_read / jingjing_status（召回按相关度而非时间）')
