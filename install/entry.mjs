@@ -20,8 +20,17 @@ const urlFile = process.env.JINGJING_URL_FILE
 
 function currentUrl() {
   try {
-    const text = fs.readFileSync(urlFile, 'utf8').trim()
-    return /^https?:\/\//.test(text) ? text : ''
+    // 守护进程用 Set-Content 写，可能带 CR/LF；多行或夹换行会让 location
+    // 头触发 ERR_INVALID_CHAR，把整个代理打崩。先剥掉所有换行再校验协议。
+    const text = fs.readFileSync(urlFile, 'utf8').replace(/[\r\n]+/g, '').trim()
+    if (!/^https?:\/\//.test(text)) return ''
+    try {
+      const parsed = new URL(text)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return ''
+      return parsed.href
+    } catch {
+      return ''
+    }
   } catch {
     return ''
   }

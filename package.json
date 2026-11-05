@@ -1,6 +1,6 @@
 {
   "name": "life-innovation",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
   "type": "module",
   "description": "给一个常驻 DSH agent 的记忆与真实生活线（人格、记忆、日子都在一个包里）",
@@ -22,7 +22,7 @@
     }
   },
   "scripts": {
-    "test": "node tests/memory.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/packcache.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/portability.test.mjs && node tests/merge.test.mjs && node tests/lifecycle.test.mjs && node tests/summaries.test.mjs && node tests/jsonschema.test.mjs && node tests/prompt_policy.test.mjs",
+    "test": "node tests/memory.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/packcache.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/portability.test.mjs && node tests/merge.test.mjs && node tests/lifecycle.test.mjs && node tests/summaries.test.mjs && node tests/jsonschema.test.mjs && node tests/prompt_policy.test.mjs && node tests/review-fixes.test.mjs",
     "pack": "npm pack",
     "check": "node --check index.js && node --check lib/store.js && node --check lib/life.js && node --check lib/summaries.js && node --check lib/merge.js && node --check lib/tools.js"
   },

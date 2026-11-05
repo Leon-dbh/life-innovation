@@ -54,6 +54,51 @@ if (!fs.existsSync(snapshot)) {
   process.exit(3)
 }
 
+// 只读打开一个库，按 manifest 里的表名单点数；表不存在按 0 算（不同版本的导出表不一样）。
+function readCounts(file) {
+  const db = new DatabaseSync(file, { readOnly: true })
+  try {
+    db.exec('PRAGMA busy_timeout = 5000')
+    const out = {}
+    for (const table of Object.keys(manifest.counts || {})) {
+      try {
+        out[table] = Number(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n)
+      } catch {
+        out[table] = 0
+      }
+    }
+    return out
+  } finally {
+    db.close()
+  }
+}
+
+/** 点数对不上返回 null；对得上返回 counts。where 只用于报错文案。 */
+function verifyCounts(file, where) {
+  let counts
+  try {
+    counts = readCounts(file)
+  } catch (err) {
+    console.error(`打不开${where}：${err.message}`)
+    return null
+  }
+  const bad = Object.entries(manifest.counts || {}).filter(([table, expected]) => counts[table] !== expected)
+  if (bad.length) {
+    for (const [table, expected] of bad) {
+      console.error(`点数不一致（${where}）：${table} 期望 ${expected}，实际 ${counts[table]}`)
+    }
+    return null
+  }
+  return counts
+}
+
+function removeDbFiles(file) {
+  // 主库要和 -wal/-shm 一起删：只换主库会把旧日志留在原地，SQLite 下次打开会把它
+  // 当成本库的回滚日志，轻则 malformed、重则混入旧数据。
+  // 是否有进程正在使用这个库不在检查范围内——导入前请先停掉宿主。
+  for (const f of [file, `${file}-wal`, `${file}-shm`]) fs.rmSync(f, { force: true })
+}
+
 fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 if (fs.existsSync(dbPath) && args.merge) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
@@ -68,7 +113,8 @@ if (fs.existsSync(dbPath) && args.merge) {
   if (fs.existsSync(diaryFrom)) {
     fs.mkdirSync(diaryTo, { recursive: true })
     for (const name of fs.readdirSync(diaryFrom)) {
-      if (!name.endsWith('.md')) continue
+      // 只认日记文件名（YYYY-MM-DD.md）；README.md 之类不是日记，不能搬过去。
+      if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(name)) continue
       const dest = path.join(diaryTo, name)
       if (fs.existsSync(dest)) { kept += 1; continue }
       fs.copyFileSync(path.join(diaryFrom, name), dest)
@@ -82,18 +128,39 @@ if (fs.existsSync(dbPath) && args.merge) {
   console.log('  日记：补 ' + copied + ' 篇，保留已有 ' + kept + ' 篇')
   process.exit(0)
 }
-if (fs.existsSync(dbPath)) {
-  if (!args.force) {
-    console.error(`目标记忆库已存在：${dbPath}\n` +
-      '  这可能是她现在的记忆。要换掉就加 --force（会先备份）；想合并进现有记忆库，目前不支持。')
-    process.exit(4)
-  }
+// 覆盖/接入前先在快照上点数：坏包不能碰到现有库。
+if (!verifyCounts(snapshot, '快照')) process.exit(5)
+
+const replacing = fs.existsSync(dbPath)
+if (replacing && !args.force) {
+  console.error(`目标记忆库已存在：${dbPath}\n` +
+    '  这可能是她现在的记忆。要换掉就加 --force（会先备份）；想合并进现有记忆库，目前不支持。')
+  process.exit(4)
+}
+
+// 先备份旧库（保持 .bak-<时间> 的命名），再删主库和 -wal/-shm，最后复制。
+let backup = null
+if (replacing) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const backup = `${dbPath}.bak-${stamp}`
+  backup = `${dbPath}.bak-${stamp}`
   fs.copyFileSync(dbPath, backup)
   console.log(`已备份现有记忆库：${backup}`)
 }
+removeDbFiles(dbPath)
 fs.copyFileSync(snapshot, dbPath)
+
+// 复制完再点一次；失败就回滚到导入前的备份，绝不留下半套库。
+const counts = verifyCounts(dbPath, '导入后')
+if (!counts) {
+  removeDbFiles(dbPath)
+  if (backup) {
+    fs.copyFileSync(backup, dbPath)
+    console.error(`导入后校验失败，已恢复导入前的备份：${backup}`)
+  } else {
+    console.error('导入后校验失败，已删除未完成的库')
+  }
+  process.exit(6)
+}
 
 // 日记：合并，默认不覆盖已有。
 const diaryFrom = path.join(fromDir, 'diary')
@@ -110,22 +177,6 @@ if (fs.existsSync(diaryFrom)) {
     imported += 1
   }
 }
-
-// 点数：不装样子。
-const db = new DatabaseSync(dbPath)
-const counts = {}
-for (const [table, expected] of Object.entries(manifest.counts || {})) {
-  try {
-    counts[table] = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n
-  } catch {
-    counts[table] = 0
-  }
-  if (counts[table] !== expected) {
-    console.error(`点数不一致：${table} 期望 ${expected}，实际 ${counts[table]}`)
-    process.exit(5)
-  }
-}
-db.close()
 
 console.log(`已接入 ${dbPath}`)
 console.log(`  来源 ${manifest.exportedAt}（${manifest.exportedBy}）`)

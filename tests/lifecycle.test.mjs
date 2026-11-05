@@ -24,6 +24,8 @@ assert.equal(halfLifeDays('我很难过'), EMOTION_HALF_LIFE_DAYS)
 const oldId = store.addRaw(now - 100 * DAY, 's0', 'user', '很久以前我说过一只叫年糕的仓鼠')
 for (let i = 0; i < 5; i += 1) store.addRaw(now - i * 1000, 's1', 'user', `最近第 ${i} 句闲聊`)
 assert.equal(store.rawById(oldId).archived, false)
+// 只有进过梗概的原话才允许归档：先补一条覆盖它的梗概，水位才成立。
+store.addSummary(now - 90 * DAY, 's0', '很久以前聊过一只仓鼠', now - 100 * DAY, now - 100 * DAY, oldId)
 const moved = store.archiveRawBefore(now - 90 * DAY)
 assert.equal(moved, 1)
 assert.equal(store.rawById(oldId).archived, true, '归档后仍按 id 读得到')

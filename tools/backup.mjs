@@ -32,7 +32,13 @@ if (!args.db) {
 }
 const dbPath = path.resolve(String(args.db))
 const dataHome = path.resolve(String(args.data || path.dirname(path.dirname(dbPath))))
-const keep = Math.max(1, Number(args.keep || 14))
+const keepArg = args.keep === undefined ? 14 : args.keep
+const keepNum = Number(keepArg)
+if (args.keep === true || !Number.isFinite(keepNum) || keepNum < 1) {
+  console.error(`--keep 需要一个 >= 1 的数字，收到：${args.keep === true ? '(缺少值)' : keepArg}`)
+  process.exit(2)
+}
+const keep = Math.max(1, Math.floor(keepNum))
 const backupsDir = path.join(dataHome, 'backups')
 fs.mkdirSync(backupsDir, { recursive: true })
 

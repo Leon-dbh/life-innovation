@@ -47,6 +47,8 @@ s.replaceLifeBlocks('2026-11-05', [
 // 来源库里有一句已经被 90 天归档规则搬去 raw_archive 的旧原话；
 // 它同样是某个日子块的证据——合并不能把它和它证明的日子一起丢掉。
 const sOld = s.addRaw(500, 's-source', 'user', '很久以前说过的一句')
+// 归档只搬「已经进过梗概」的原话：先造一条覆盖它的梗概，水位才成立。
+s.addSummary(600, 's-source', '很久以前聊过一句', 500, 500, sOld)
 s.archiveRawBefore(800)
 s.replaceLifeBlocks('2026-11-04', [
   { activity: '和他说说话', startedAt: 500, endedAt: 500, evidence: [`raw:${sOld}`] },

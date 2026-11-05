@@ -118,6 +118,7 @@ export function apply(ctx, config = {}) {
   ctx.on('session/event', (session, event) => {
     try {
       const type = event?.type
+      const eventSessionId = String(session?.id || session?.sessionId || '')
       if (type === 'tool/call') {
         const call = event?.data || {}
         const rawArgs = call.arguments
@@ -125,7 +126,7 @@ export function apply(ctx, config = {}) {
         const args = argsText.replace(/\s+/g, ' ').slice(0, 120)
         store.addAction({
           ts: Number(event?.time) || Date.now(),
-          sessionId: String(session?.id || ''),
+          sessionId: eventSessionId,
           kind: 'tool',
           tool: String(call.name || ''),
           summary: args,
@@ -144,7 +145,15 @@ export function apply(ctx, config = {}) {
           || data.message?.source?.callId
           || '',
         )
-        if (callId) store.updateAction(callId, data?.message?.isError ? 'error' : 'ok')
+        const status = data?.message?.isError || data?.error ? 'error' : 'ok'
+        if (callId) {
+          store.updateAction(callId, status)
+        } else {
+          // 少数路径不带 callId：按「同 session + 同 tool 最近一条 called」兜底，
+          // 至少别让她做过的工具永远停在 called。
+          const tool = String(data.message?.name || data.tool || data.message?.source?.tool || data.message?.toolName || '')
+          store.updateActionByFallback(eventSessionId, tool, status)
+        }
         return
       }
       if (type !== 'user/message' && type !== 'assistant/message') return

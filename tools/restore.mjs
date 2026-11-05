@@ -12,14 +12,18 @@
  *   node tools/restore.mjs --db D:/jingjing-home/state/jingjing.sqlite --list
  */
 import fs from 'node:fs'
+import { resolvePaths } from '../lib/paths.js'
 import { MemoryStore } from '../lib/store.js'
 
 function parseArgs(argv) {
-  const out = { db: process.env.JINGJING_DB || 'D:/jingjing-home/state/jingjing.sqlite', list: false, id: null, json: false }
+  const out = { db: resolvePaths().dbPath, list: false, id: null, json: false }
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i]
-    if (a === '--db') out.db = argv[++i]
-    else if (a === '--list') out.list = true
+    if (a === '--db') {
+      const value = argv[++i]
+      if (!value || value.startsWith('--')) throw new Error('--db 需要路径')
+      out.db = value
+    } else if (a === '--list') out.list = true
     else if (a === '--id') out.id = Number(argv[++i])
     else if (a === '--json') out.json = true
     else if (a === '-h' || a === '--help') out.help = true

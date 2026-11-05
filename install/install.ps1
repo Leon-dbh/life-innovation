@@ -34,6 +34,161 @@ function Run-If($block) {
   if ($DryRun) { Info '(dry-run) 跳过执行' } else { & $block }
 }
 
+# ---- 读写 profile 的小工具（保留原编码，迁移前先备份） ----
+function Read-Utf8Text([string]$path) {
+  return [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)
+}
+function Test-Utf8Bom([string]$path) {
+  $bytes = [IO.File]::ReadAllBytes($path)
+  return ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+}
+function Write-Utf8Text([string]$path, [string]$text, [bool]$bom) {
+  [IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding($bom)))
+}
+function Normalize-PathValue([string]$value) {
+  if (-not $value) { return '' }
+  $v = $value.Trim()
+  if ($v.Length -ge 2) {
+    if (($v.StartsWith("'") -and $v.EndsWith("'")) -or ($v.StartsWith('"') -and $v.EndsWith('"'))) {
+      $v = $v.Substring(1, $v.Length - 2)
+    }
+  }
+  return $v.Replace('\', '/').TrimEnd('/').ToLowerInvariant()
+}
+
+# 把老 profile 的 dsh-jingjing bundle 名迁移到 life-innovation，只动 bundles。
+function Migrate-ProfileBundles([string]$path) {
+  try {
+    $obj = ConvertFrom-Json -InputObject (Read-Utf8Text $path)
+  } catch {
+    Warn ("package.json 解析失败，跳过 bundle 迁移：{0}" -f $_.Exception.Message)
+    return
+  }
+  $bundles = @()
+  if ($obj.dsh -and $obj.dsh.profile -and $obj.dsh.profile.bundles) {
+    $bundles = @($obj.dsh.profile.bundles)
+  }
+  $new = New-Object System.Collections.Generic.List[string]
+  $changed = $false
+  foreach ($b in $bundles) {
+    $name = [string]$b
+    if ($name -eq 'dsh-jingjing' -or $name -eq '@local/dsh-jingjing') { $changed = $true; continue }
+    if (-not $new.Contains($name)) { $new.Add($name) }
+  }
+  if (-not $new.Contains('life-innovation')) { $new.Add('life-innovation'); $changed = $true }
+  if (-not $changed) { return }
+
+  if (-not $obj.dsh) {
+    $obj | Add-Member -NotePropertyName dsh -NotePropertyValue ([pscustomobject]@{}) -Force
+  }
+  if (-not $obj.dsh.profile) {
+    $obj.dsh | Add-Member -NotePropertyName profile -NotePropertyValue ([pscustomobject]@{}) -Force
+  }
+  if (-not $obj.dsh.profile.PSObject.Properties['bundles']) {
+    $obj.dsh.profile | Add-Member -NotePropertyName bundles -NotePropertyValue @() -Force
+  }
+  $obj.dsh.profile.bundles = @($new)
+  $hadBom = Test-Utf8Bom $path
+  Copy-Item -LiteralPath $path -Destination ("{0}.bak-{1}" -f $path, $Stamp)
+  Write-Utf8Text $path ($obj | ConvertTo-Json -Depth 20) $hadBom
+  Info ("已迁移 package.json：bundles 改为 {0}（旧文件备份为 .bak-{1}）" -f (($new -join ', ')), $Stamp)
+}
+
+# 在 patch 文本里 upsert 唯一的 life-innovation（兼容旧 id jingjing-memory）home 覆盖项。
+function Set-MemoryOverride([string]$text, [string]$home, [bool]$appendIfMissing) {
+  $nl = "`n"
+  if ($text.Contains("`r`n")) { $nl = "`r`n" }
+  $lines = New-Object System.Collections.Generic.List[string]
+  $lines.AddRange([string[]]([regex]::Split($text, "\r?\n")))
+
+  $idPattern = '^\s*-\s+id:\s*(life-innovation|jingjing-memory)\s*$'
+  $blocks = New-Object System.Collections.Generic.List[object]
+  for ($i = 0; $i -lt $lines.Count; $i++) {
+    if ($lines[$i] -match $idPattern) {
+      $id = $matches[1]
+      $indent = $lines[$i].Length - $lines[$i].TrimStart().Length
+      $end = $lines.Count - 1
+      for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+        $line = $lines[$j]
+        if ($line.Trim() -eq '') { continue }
+        $ind = $line.Length - $line.TrimStart().Length
+        if ($ind -lt $indent -and $line -notmatch '^\s*#') { $end = $j - 1; break }
+        if ($ind -eq $indent -and $line -match '^\s*-\s') { $end = $j - 1; break }
+        if ($indent -eq 0 -and $ind -eq 0 -and $line -notmatch '^\s*[-#]') { $end = $j - 1; break }
+      }
+      $blocks.Add([pscustomobject]@{ Start = $i; End = $end; Indent = $indent; Id = $id })
+      $i = $end
+    }
+  }
+
+  if ($blocks.Count -eq 0) {
+    if (-not $appendIfMissing) { return $text }
+    $block = $nl + '- id: life-innovation' + $nl + "  name: 'life-innovation'" + $nl + '  config:' + $nl + ('    home: ' + $home) + $nl
+    if ($text.Length -eq 0) { return $block.TrimStart("`r", "`n") }
+    if (-not $text.EndsWith("`n")) { $text += $nl }
+    return ($text + $block)
+  }
+
+  # 只保留一个插件实例：优先 life-innovation，否则第一个旧 id 块。
+  $keep = $null
+  foreach ($b in $blocks) { if ($b.Id -eq 'life-innovation') { $keep = $b; break } }
+  if (-not $keep) { $keep = $blocks[0] }
+
+  foreach ($b in ($blocks | Where-Object { $_.Start -ne $keep.Start } | Sort-Object Start -Descending)) {
+    $count = $b.End - $b.Start + 1
+    if ($b.End -lt $keep.Start) {
+      $keep.Start -= $count
+      $keep.End -= $count
+    } elseif ($b.Start -le $keep.End) {
+      $keep.End -= $count
+    }
+    $lines.RemoveRange($b.Start, $count)
+  }
+
+  $lines[$keep.Start] = $lines[$keep.Start] -replace 'jingjing-memory', 'life-innovation'
+  $homeIdx = -1
+  for ($j = $keep.Start + 1; $j -le $keep.End; $j++) {
+    if ($lines[$j] -match '^\s*home:\s*') { $homeIdx = $j; break }
+  }
+  if ($homeIdx -ge 0) {
+    $ind = $lines[$homeIdx].Length - $lines[$homeIdx].TrimStart().Length
+    $old = ($lines[$homeIdx] -replace '^\s*home:\s*', '').Trim()
+    if ((Normalize-PathValue $old) -ne (Normalize-PathValue $home)) {
+      $lines[$homeIdx] = (' ' * $ind) + 'home: ' + $home
+    }
+  } else {
+    $cfgIdx = -1
+    for ($j = $keep.Start + 1; $j -le $keep.End; $j++) {
+      if ($lines[$j] -match '^\s*config:\s*$') { $cfgIdx = $j; break }
+    }
+    if ($cfgIdx -ge 0) {
+      $cfgIndent = $lines[$cfgIdx].Length - $lines[$cfgIdx].TrimStart().Length
+      $lines.Insert($cfgIdx + 1, ((' ' * ($cfgIndent + 2)) + 'home: ' + $home))
+    } else {
+      $lines.InsertRange($keep.Start + 1, [string[]]@(
+        ((' ' * ($keep.Indent + 2)) + 'config:'),
+        ((' ' * ($keep.Indent + 4)) + 'home: ' + $home)
+      ))
+    }
+  }
+  return ($lines -join $nl)
+}
+
+# 迁移 patch：旧插件名 -> life-innovation，并把唯一的 home 覆盖项改成 -DataHome。
+function Migrate-PatchFile([string]$path) {
+  $text = Read-Utf8Text $path
+  $orig = $text
+  $text = $text -replace '@local/dsh-jingjing', 'life-innovation'
+  $text = $text -replace 'dsh-jingjing', 'life-innovation'
+  $text = Set-MemoryOverride -text $text -home $DataFwd -appendIfMissing ($DataFwd -ne 'D:/jingjing-home')
+  if ($text -ne $orig) {
+    $hadBom = Test-Utf8Bom $path
+    Copy-Item -LiteralPath $path -Destination ("{0}.bak-{1}" -f $path, $Stamp)
+    Write-Utf8Text $path $text $hadBom
+    Info ("已迁移 cordis.patch.yml（旧文件备份为 .bak-{0}）" -f $Stamp)
+  }
+}
+
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $PluginPath) { $PluginPath = (Resolve-Path (Join-Path $here '..')).Path }
 $PluginPath = $PluginPath.TrimEnd('\')
@@ -51,8 +206,7 @@ if (-not $node) { throw '找不到 node。先装 Node.js 22+（推荐 24）。' 
 Info ("node " + (& node --version))
 $npm = Get-Command npm -ErrorAction SilentlyContinue
 if (-not $npm) { Warn '找不到 npm；装插件时会用到。' }
-$env:PATH = "$env:APPDATA
-pm;$env:PATH"
+$env:PATH = "$env:APPDATA\npm;$env:PATH"
 if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
   # 插件管理器靠 pnpm 装包；没有它时旧版只警告，结果插件没装上、web 照常起，
   # 用户看到的是「她没记忆」而不是安装失败。这里直接补装，装不上就停。
@@ -61,8 +215,7 @@ if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
   } else {
     Info '没找到 pnpm，先装：npm i -g pnpm@10'
     & npm.cmd install -g pnpm@10 2>&1 | Out-Null
-    $env:PATH = "$env:APPDATA
-pm;$env:PATH"
+    $env:PATH = "$env:APPDATA\npm;$env:PATH"
     if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
       throw 'pnpm 装不上（npm i -g pnpm@10 失败）。装好后再重跑本脚本；或加 -SkipPluginAdd 手动装插件。'
     }
@@ -140,22 +293,34 @@ $patch = @"
         apiKeyEnv: DEEPSEEK_API_KEY
 $memoryOverride
 "@
-if ((Test-Path $pkgPath) -and -not $Force) {
+$pkgExists = Test-Path $pkgPath
+$patchExists = Test-Path $patchPath
+if ($pkgExists -and -not $Force) {
   Info 'package.json 已存在，保留（要重写成全新状态加 -Force）'
+  if ($DryRun) {
+    Info '(dry-run) 会检查并迁移旧的 dsh-jingjing bundle 名'
+  } else {
+    Migrate-ProfileBundles $pkgPath
+  }
 } else {
   Run-If {
-    if (Test-Path $pkgPath) { Copy-Item $pkgPath "$pkgPath.bak-$Stamp" }
+    if ($pkgExists) { Copy-Item $pkgPath "$pkgPath.bak-$Stamp" }
     New-Item -ItemType Directory -Path $ProfileDir -Force | Out-Null
-    [IO.File]::WriteAllText($pkgPath, $pkg, (New-Object Text.UTF8Encoding($false)))
+    Write-Utf8Text $pkgPath $pkg $false
   }
   if (-not $DryRun) { Info "写 package.json" } else { Info "(dry-run) 将写 package.json" }
 }
-if ((Test-Path $patchPath) -and -not $Force) {
+if ($patchExists -and -not $Force) {
   Info 'cordis.patch.yml 已存在，保留（加 -Force 会备份后重写）'
+  if ($DryRun) {
+    Info '(dry-run) 会迁移旧插件 id / 按 -DataHome 更新 home'
+  } else {
+    Migrate-PatchFile $patchPath
+  }
 } else {
   Run-If {
-    if (Test-Path $patchPath) { Copy-Item $patchPath "$patchPath.bak-$Stamp" }
-    [IO.File]::WriteAllText($patchPath, $patch, (New-Object Text.UTF8Encoding($false)))
+    if ($patchExists) { Copy-Item $patchPath "$patchPath.bak-$Stamp" }
+    Write-Utf8Text $patchPath $patch $false
   }
   if (-not $DryRun) { Info '写 cordis.patch.yml' } else { Info '(dry-run) 将写 cordis.patch.yml' }
 }
@@ -187,7 +352,7 @@ $backupBody = @"
 "$((Get-Command node).Source)" "$PluginPath\tools\backup.mjs" --db "$DbPath" --data "$DataHome" --keep 14 >> "$DataHome\logs\backup.log" 2>&1
 "@
 Run-If {
-  [IO.File]::WriteAllText($backupCmd, $backupBody, (New-Object Text.ASCIIEncoding))
+  [IO.File]::WriteAllText($backupCmd, $backupBody, (New-Object System.Text.UTF8Encoding($true)))
   & schtasks.exe /Create /F /SC DAILY /ST 03:30 /TN "JingjingDailyBackup" /TR "`"$backupCmd`"" | Out-Null
   if ($LASTEXITCODE -ne 0) { Warn "计划任务创建失败（退出码 $LASTEXITCODE）；可以手动把 $backupCmd 挂到任务计划程序。" }
   else { Info '已注册计划任务 JingjingDailyBackup' }

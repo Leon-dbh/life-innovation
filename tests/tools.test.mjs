@@ -40,7 +40,7 @@ assert.ok(rare.hits[0].score > 0)
 const read = registry.get('memory_read')
 const big = out.hits.find((h) => h.text.endsWith('…')) || out.hits[0]
 const full = await read.execute({ ref: big.ref })
-assert.ok(full.text.length <= 2001, 'memory_read 最多 2000 字')
+assert.ok(full.text.length <= 2000, 'memory_read 最多 2000 字（含省略号）')
 assert.equal(full.ref, big.ref)
 
 const act = await read.execute({ ref: 'act:1' })

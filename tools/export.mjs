@@ -48,9 +48,15 @@ fs.mkdirSync(outDir, { recursive: true })
 // 1) 记忆库：VACUUM INTO 生成一致快照（不会把 -wal 拆开）。
 const snapshot = path.join(outDir, 'jingjing.sqlite')
 if (fs.existsSync(snapshot)) fs.rmSync(snapshot)
-const db = new DatabaseSync(dbPath, { readOnly: true })
+const source = new DatabaseSync(dbPath, { readOnly: true })
+source.exec('PRAGMA busy_timeout = 5000')
+source.exec(`VACUUM INTO '${snapshot.replaceAll("'", "''")}'`)
+source.close()
+
+// 点数必须在快照上数：VACUUM INTO 之后宿主仍可能继续写源库，
+// 用源连接数出来的 counts 会超前于快照，导入端点数校验就会失败（exit 5）。
+const db = new DatabaseSync(snapshot, { readOnly: true })
 db.exec('PRAGMA busy_timeout = 5000')
-db.exec(`VACUUM INTO '${snapshot.replaceAll("'", "''")}'`)
 const counts = {}
 for (const table of ['raw_turns', 'assertions', 'profiles', 'relations', 'summaries', 'actions', 'life_blocks', 'outbox']) {
   try {
@@ -64,6 +70,16 @@ db.close()
 // 2) 日记：只导出 YYYY-MM-DD.md，别的文件不碰。
 const diarySrc = path.join(dataHome, 'diary')
 const diaryOut = path.join(outDir, 'diary')
+
+// --force 时先清掉目标 diary 里上次留下的 *.md，否则旧日期会留在“新”导出里。
+if (args.force && fs.existsSync(diaryOut)) {
+  for (const name of fs.readdirSync(diaryOut)) {
+    if (!name.endsWith('.md')) continue
+    const p = path.join(diaryOut, name)
+    if (fs.statSync(p).isFile()) fs.rmSync(p, { force: true })
+  }
+}
+
 let diaryCount = 0
 if (fs.existsSync(diarySrc)) {
   fs.mkdirSync(diaryOut, { recursive: true })

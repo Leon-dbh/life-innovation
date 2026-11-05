@@ -1,4 +1,4 @@
-# 鲸鲸的守护进程（Windows，由登录时启动的 HKCU Run 键运行）。
+﻿# 鲸鲸的守护进程（Windows，由登录时启动的 HKCU Run 键运行）。
 #
 # 它做四件事：
 #   1. 起一个固定入口 127.0.0.1:<EntryPort>，把请求 302 到当前这次启动的带 token 地址
@@ -38,15 +38,29 @@ function Write-Log([string]$message) {
 # ---- 单例：同一个 DataHome 不跑第二个守护进程（否则两个 node 抢 60081） ----
 if (Test-Path $pidFile) {
   $other = 0
-  [void][int]::TryParse((Get-Content $pidFile -Raw -ErrorAction SilentlyContinue).Trim(), [ref]$other)
+  $rawPid = $null
+  try { $rawPid = Get-Content -Path $pidFile -Raw -ErrorAction Stop } catch {
+    Write-Log ('pid 文件读取失败（{0}），忽略旧 pid。' -f $_.Exception.Message)
+  }
+  if ($null -ne $rawPid) {
+    $rawPid = ([string]$rawPid).Trim()
+    if ($rawPid -and -not [int]::TryParse($rawPid, [ref]$other)) { $other = 0 }
+  }
   if ($other -gt 0) {
     $alive = Get-Process -Id $other -ErrorAction SilentlyContinue
     if ($alive) {
       $cmd = $null
       try { $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId=$other" -ErrorAction Stop).CommandLine } catch { $cmd = $null }
-      if ($cmd -and $cmd -match 'service\.ps1') {
+      # 只认“本 DataHome 的 service.ps1”，别的 profile 的 pid 不算单例。
+      $homePattern = [regex]::Escape($DataHome)
+      if ($cmd -and $cmd -match 'service\.ps1' -and $cmd -match $homePattern) {
         Write-Log ('已有守护进程在跑（pid {0}），本进程退出。' -f $other)
         exit 0
+      }
+      if ($cmd -and $cmd -match 'service\.ps1') {
+        Write-Log ('pid {0} 是别的 DataHome 的守护进程（缺 {1}），忽略。' -f $other, $DataHome)
+      } else {
+        Write-Log ('pid {0} 不是本服务的守护进程，忽略。' -f $other)
       }
     }
   }
@@ -80,7 +94,8 @@ function Start-EntryProxy {
   if ($NoProxy -or -not (Test-Path $entryJs)) { return $null }
   $env:JINGJING_ENTRY_PORT = [string]$EntryPort
   $env:JINGJING_URL_FILE = $urlFile
-  $p = Start-Process -FilePath $node -ArgumentList @($entryJs) -WorkingDirectory $DataHome -PassThru -WindowStyle Hidden
+  $entryArg = '"' + $entryJs + '"'
+  $p = Start-Process -FilePath $node -ArgumentList @($entryArg) -WorkingDirectory $DataHome -PassThru -WindowStyle Hidden
   Write-Log ('固定入口已启动：http://127.0.0.1:{0}/  (pid {1})' -f $EntryPort, $p.Id)
   return $p
 }
@@ -91,7 +106,10 @@ $proxy = Start-EntryProxy
 # 结束一个进程及其子进程：npm.cmd 只是壳，node 才是真正占着端口的那个。
 function Stop-Tree([int]$id) {
   if (-not $id) { return }
-  & taskkill.exe /PID $id /T /F 2>$null | Out-Null
+  $out = & taskkill.exe /PID $id /T /F 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    Write-Log ('结束进程树失败（pid {0}，退出码 {1}）：{2}' -f $id, $LASTEXITCODE, (($out | Out-String).Trim()))
+  }
 }
 
 $backoff = 5
@@ -125,7 +143,7 @@ try {
       Start-Sleep -Milliseconds 500
       if ($proxy -and $proxy.HasExited) { $proxy = Start-EntryProxy }
       if (Test-Path $outLog) {
-        $hit = Select-String -Path $outLog -Pattern 'dsh web:\s*(http\S+)' -ErrorAction SilentlyContinue | Select-Object -First 1
+        $hit = Select-String -Path $outLog -Pattern 'dsh web:\s*(http\S+)' -ErrorAction SilentlyContinue | Select-Object -Last 1
         if ($hit) {
           $url = $hit.Matches[0].Groups[1].Value
           Set-Content -Path $urlFile -Value $url -Encoding UTF8

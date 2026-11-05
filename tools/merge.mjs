@@ -13,6 +13,16 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { mergeDatabase } from '../lib/merge.js'
 
+/** 是否同一个文件：两边都先解析成绝对路径（存在时再解真实路径），再统一小写比较。 */
+function sameFile(a, b) {
+  const norm = (p) => {
+    let out = path.resolve(String(p))
+    try { out = fs.realpathSync.native(out) } catch { /* 文件不存在就按绝对路径比 */ }
+    return out.replace(/[\\/]+$/, '').toLowerCase()
+  }
+  return norm(a) === norm(b)
+}
+
 function parseArgs(argv) {
   const out = {}
   for (let i = 0; i < argv.length; i += 1) {
@@ -31,6 +41,11 @@ if (!args.target || !args.source) {
   console.error('用法: node tools/merge.mjs --target <现有库> --source <另一份库> [--data <home>] [--no-backup]')
   process.exit(2)
 }
+// --data 不带值时 parseArgs 会记成 true，path.resolve 之后就成了一个叫 "true" 的目录。
+if (args.data === true) {
+  console.error('--data 需要跟一个目录，例如 --data D:/jingjing-home')
+  process.exit(2)
+}
 const target = path.resolve(String(args.target))
 const source = path.resolve(String(args.source))
 if (!fs.existsSync(target)) {
@@ -41,7 +56,7 @@ if (!fs.existsSync(source)) {
   console.error(`来源库不存在：${source}`)
   process.exit(3)
 }
-if (target.toLowerCase() === source.toLowerCase()) {
+if (sameFile(target, source)) {
   console.error('目标库和来源库是同一个文件')
   process.exit(4)
 }
