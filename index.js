@@ -15,6 +15,7 @@ import { reconcileOnStart, syncPhase, tickRhythm, rhythmText } from './lib/rhyth
 import { registerMemoryTools } from './lib/tools.js'
 import { createHands } from './lib/hands.js'
 import { resolvePaths } from './lib/paths.js'
+import { renderHome, renderHomeError } from './install/home.mjs'
 import * as observe from './lib/observe.js'
 
 export const name = 'life-innovation'
@@ -99,6 +100,40 @@ export function apply(ctx, config = {}) {
 
   // 四个只读工具（回忆/读全文/状态/日子）+ 六只手。
   guarded('记忆工具', () => registerMemoryTools({ ctx, store, observe, hands }))
+
+  // 家页面也挂在 DSH 自己的 webServer 上（同源），所以客户端按钮不用猜 60080：
+  // 端口、token、反代全都跟着当前这个 DSH 走。
+  guarded('家页面路由', () => {
+    ctx.inject(['webServer'], (webCtx) => {
+      webCtx.effect(() => webCtx.webServer.register({
+        kind: 'exact',
+        path: '/life-innovation/home',
+        handler: (req, res) => {
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8' })
+            res.end('只支持 GET')
+            return
+          }
+          let html
+          try {
+            html = renderHome({ home, dbPath, now: Date.now(), chatUrl: '/', agentName })
+          } catch (error) {
+            html = renderHomeError(error, agentName)
+            res.writeHead(503, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+            res.end(html)
+            return
+          }
+          res.writeHead(200, {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+            'referrer-policy': 'no-referrer',
+            'x-content-type-options': 'nosniff',
+          })
+          res.end(req.method === 'HEAD' ? undefined : html)
+        },
+      }), 'life-innovation: home route')
+    })
+  })
 
   // 记忆块按指纹缓存：只有记忆真的变了才重建，保住系统提示词的前缀缓存。
   const packCache = createPackCache({ store, maxChars, subject: SUBJECT })
@@ -254,7 +289,8 @@ export function apply(ctx, config = {}) {
         store, now, dir: diaryDir,
         quietAction: hands ? () => hands.quietAction(now) : null,
       })
-      if (rhythm.closed) ctx.logger?.info?.(`[life-innovation] 归档了 ${rhythm.closed.date}（${rhythm.closed.count} 件事）`)
+      const closedList = Array.isArray(rhythm.closed) ? rhythm.closed : (rhythm.closed?.closed || [])
+      for (const c of closedList) ctx.logger?.info?.(`[life-innovation] 归档了 ${c.date}（${c.count} 件事）`)
       if (rhythm.dream) ctx.logger?.info?.(`[life-innovation] 做了个梦（非事实层）`)
       const done = tick({ store, now, dir: diaryDir })
       if (done) ctx.logger?.info?.(`[life-innovation] 写了日记 ${done.file}`)

@@ -117,9 +117,9 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 固定入口 `http://127.0.0.1:60080/home` 是只读仪表盘：今天做了什么、记得关于你的事、关系、梗概、梦（梦会标「不是真事」）。页面以只读连接读同一个 SQLite，不写库、不调模型、不替她说话；所有文本转义，90 秒自动刷新。
 
-会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`，点开就是同一页。
+会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`。它打开的是 DSH 同源地址 `/life-innovation/home`（由插件自己注册），所以改固定入口 `-EntryPort` 不会让按钮失效。
 
-页面只列「今天」；最近七天用 `life_days` 工具。页面默认读 `<home>/state/life-innovation.sqlite`；如果显式改了 `dbPath`，用 `LIFE_INNOVATION_DB` 指向同一个库。安装时改了 `-EntryPort`，`client.js` 里默认的 `60080` 也要同步改。
+页面只列「今天」；最近七天用 `life_days` 工具。页面默认读 `<home>/state/life-innovation.sqlite`；同一个库由安装脚本、service 和备份脚本共享 `dbPath`，不再各自猜路径。
 
 ## 记忆
 
@@ -262,7 +262,7 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.2.0.tgz
 ## 测试
 
 ```powershell
-npm test          # 17 个测试文件
+npm test          # 18 个测试文件
 npm run check     # 语法检查
 ```
 

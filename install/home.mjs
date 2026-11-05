@@ -12,7 +12,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-const TZ = 'Asia/Shanghai'
 const PHASE = {
   awake: { name: '醒着', color: '#e4b07a', hint: '刚和你说过话' },
   quiet: { name: '安静', color: '#7e9ab5', hint: '没人在说话，她自己在过' },
@@ -33,28 +32,41 @@ function clip(text, max) {
   return s.slice(0, Math.max(0, max - 1)) + '…'
 }
 
+function localParts(now) {
+  const d = new Date(now)
+  return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate(), h: d.getHours(), mi: d.getMinutes() }
+}
+
+function pad(n) { return String(n).padStart(2, '0') }
+
+// 页面和 life_blocks 用同一套本地日历：数据按服务器本地时间写，页面也按本地时间读。
+// 不固定 Asia/Shanghai——否则换一台非 +08 的机器，页面和日子会差一天。
 function dateKey(now) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date(now))
+  const p = localParts(now)
+  return `${p.y}-${pad(p.m)}-${pad(p.d)}`
 }
 
 function clock(ts) {
   if (!Number.isFinite(Number(ts))) return '--:--'
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(new Date(Number(ts)))
+  const p = localParts(Number(ts))
+  return `${pad(p.h)}:${pad(p.mi)}`
+}
+
+function startOfDay(date) {
+  const [y, m, d] = String(date).split('-').map(Number)
+  return new Date(y, m - 1, d).getTime()
+}
+
+function nextDayStart(date) {
+  const [y, m, d] = String(date).split('-').map(Number)
+  return new Date(y, m - 1, d + 1).getTime()
 }
 
 function dateLabel(date) {
-  const d = new Date(`${date}T00:00:00+08:00`)
-  // 不用 getFullYear()/getMonth()：它们取的是服务器本地时区，
-  // 在 UTC 机器上会把 11 月 6 日显示成 11 月 5 日。这里固定按上海时区取。
-  const parts = new Intl.DateTimeFormat('zh-CN', {
-    timeZone: TZ, year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'long',
-  }).formatToParts(d)
-  const pick = (type) => parts.find((x) => x.type === type)?.value || ''
-  return `${pick('year')} 年 ${pick('month')} 月 ${pick('day')} 日 · ${pick('weekday')}`
+  const [y, m, d] = String(date).split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  const weekday = new Intl.DateTimeFormat('zh-CN', { weekday: 'long' }).format(dt)
+  return `${y} 年 ${m} 月 ${d} 日 · ${weekday}`
 }
 
 function evidenceList(raw) {
@@ -118,8 +130,8 @@ function factLine(fact) {
 
 export function collectHome({ home, dbPath, now = Date.now() }) {
   const today = dateKey(now)
-  const dayStart = Date.parse(`${today}T00:00:00+08:00`)
-  const dayEnd = dayStart + 86400000 - 1
+  const dayStart = startOfDay(today)
+  const dayEnd = nextDayStart(today) - 1
   let db
   try {
     db = new DatabaseSync(dbPath, { readOnly: true })
@@ -139,7 +151,7 @@ export function collectHome({ home, dbPath, now = Date.now() }) {
     const actions = rows(db, "SELECT id, ts, tool, summary FROM actions WHERE ts BETWEEN ? AND ? AND status = 'ok' ORDER BY ts DESC, id DESC LIMIT 24", [dayStart, dayEnd])
     const facts = rows(db, 'SELECT subject, predicate, value, due_at FROM assertions WHERE valid_to IS NULL ORDER BY id DESC LIMIT 16')
     const summaries = rows(db, 'SELECT ts, text FROM summaries ORDER BY id DESC LIMIT 2')
-    const dreams = rows(db, 'SELECT date, text, evidence FROM dreams ORDER BY id DESC LIMIT 1')
+    const dreams = rows(db, 'SELECT date, text, evidence FROM dreams WHERE date = ? ORDER BY id DESC LIMIT 1', [today])
     const relation = row(db, 'SELECT person_id, stage, first_seen, last_seen, turns FROM relations ORDER BY last_seen DESC LIMIT 1')
     const profileName = row(db, "SELECT value FROM profiles WHERE key = '名字' LIMIT 1")
     const current = row(db, 'SELECT phase, started_at, reason FROM life_phases WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1')
@@ -173,8 +185,7 @@ export function collectHome({ home, dbPath, now = Date.now() }) {
   }
 }
 
-function track(phases, dayStart, now) {
-  const total = 86400000
+function track(phases, dayStart, now, total) {
   return phases.map((p) => {
     const start = Math.max(dayStart, Number(p.started_at) || dayStart)
     const end = Math.min(dayStart + total, Number(p.ended_at) || now)
@@ -348,7 +359,8 @@ function statsLine(stats) {
 export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agentName = '' }) {
   const data = collectHome({ home, dbPath, now })
   const today = data.today
-  const dayStart = Date.parse(`${today}T00:00:00+08:00`)
+  const dayStart = startOfDay(today)
+  const total = nextDayStart(today) - dayStart
   const currentMeta = data.current ? (PHASE[data.current.phase] || { name: data.current.phase }) : null
   const name = data.name || '他'
   const homeTitle = agentName ? `${agentName}的家` : '家'
@@ -376,9 +388,9 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
 
         <div class="track-wrap" aria-label="今天的节律">
           <div class="track">
-            ${track(data.phases, dayStart, now)}
-            ${now >= dayStart && now <= dayStart + 86400000
-              ? `<span class="nowline" style="left:${(((now - dayStart) / 86400000) * 100).toFixed(3)}%"></span>`
+            ${track(data.phases, dayStart, now, total)}
+            ${now >= dayStart && now <= dayStart + total
+              ? `<span class="nowline" style="left:${(((now - dayStart) / total) * 100).toFixed(3)}%"></span>`
               : ''}
           </div>
           <div class="ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>

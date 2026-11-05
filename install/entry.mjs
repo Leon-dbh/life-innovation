@@ -16,7 +16,9 @@ import http from 'node:http'
 import path from 'node:path'
 import { renderHome, renderHomeError, homeFilePath } from './home.mjs'
 
-const port = Number(process.env.LIFE_INNOVATION_ENTRY_PORT || process.env.JINGJING_ENTRY_PORT || 60080)
+const rawPort = Number(process.env.LIFE_INNOVATION_ENTRY_PORT || process.env.JINGJING_ENTRY_PORT || 60080)
+const port = Number.isInteger(rawPort) && rawPort >= 1 && rawPort <= 65535 ? rawPort : 60080
+if (port !== rawPort) console.error(`[life-innovation] 入口端口不合法（${process.env.LIFE_INNOVATION_ENTRY_PORT || process.env.JINGJING_ENTRY_PORT}），改用 ${port}`)
 const homeEnv = process.env.LIFE_INNOVATION_HOME || process.env.JINGJING_HOME
 const urlFile = process.env.LIFE_INNOVATION_URL_FILE || process.env.JINGJING_URL_FILE
   || path.join(homeEnv || 'D:/life-innovation-home', 'state', 'web-url.txt')

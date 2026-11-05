@@ -359,9 +359,15 @@ if ($SkipBackupTask) { Info '按参数跳过（不写 backup.cmd，也不注册�
 # 真正的备份逻辑放进 backup.ps1（PowerShell 按 UTF-8 BOM 读），cmd 只做转发。
 $nodePath = (Get-Command node).Source
 $backupPs1 = Join-Path $DataHome 'backup.ps1'
+# 路径里有单引号（例如 O'Brien）时，PowerShell 单引号字符串要写成两个单引号。
+$nodePs = $nodePath.Replace("'", "''")
+$pluginPs = $PluginPath.Replace("'", "''")
+$dbPs = $DbPath.Replace("'", "''")
+$dataPs = $DataHome.Replace("'", "''")
+$logPs = (Join-Path $DataHome 'logs/backup.log').Replace("'", "''")
 $backupBody = @"
 `$ErrorActionPreference = 'Continue'
-& '$nodePath' '$PluginPath\tools\backup.mjs' --db '$DbPath' --data '$DataHome' --keep 14 *>> '$DataHome\logs\backup.log'
+& '$nodePs' '$pluginPs/tools/backup.mjs' --db '$dbPs' --data '$dataPs' --keep 14 *>> '$logPs'
 exit `$LASTEXITCODE
 "@
 Run-If {
@@ -387,7 +393,7 @@ if ($NoService) {
 } else {
   if (-not (Test-Path $homeSrc)) { throw "缺少 $homeSrc——固定入口的 /home 页面需要它" }
   $svcText = Get-Content -Raw -Encoding UTF8 -Path $svcSrc
-  $svcText = $svcText.Replace('@DATA_HOME@', $DataHome).Replace('@DSH_HOME@', $DshHome).Replace('@PROFILE@', $Profile).Replace('@PORT@', [string]$Port).Replace('@ENTRY_PORT@', [string]$EntryPort).Replace('@AGENT_NAME@', $AgentName)
+  $svcText = $svcText.Replace('@DATA_HOME@', $DataHome).Replace('@DSH_HOME@', $DshHome).Replace('@PROFILE@', $Profile).Replace('@PORT@', [string]$Port).Replace('@ENTRY_PORT@', [string]$EntryPort).Replace('@AGENT_NAME@', $AgentName).Replace('@DB_PATH@', $DbPath)
   Run-If {
     New-Item -ItemType Directory -Force -Path $serviceDir | Out-Null
     [IO.File]::WriteAllText((Join-Path $serviceDir 'service.ps1'), $svcText, (New-Object Text.UTF8Encoding($true)))

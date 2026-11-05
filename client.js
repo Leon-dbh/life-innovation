@@ -8,7 +8,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const h = React.createElement
-    const HOME_URL = 'http://127.0.0.1:60080/home'
+    const HOME_URL = '/life-innovation/home'
 
     function HomeAction() {
       return h('a', {

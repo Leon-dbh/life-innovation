@@ -2,6 +2,18 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.2.1 — 2026-11-06
+
+修安装、家页面和合并路径上「各自猜」的问题。
+
+- **数据库单源**：安装脚本把最终 `dbPath` 替换进 `service.ps1` 的 `@DB_PATH@`；service 启动 DSH 和入口代理前无条件设置 `LIFE_INNOVATION_*`，不再在函数里自己拼旧路径。新装机器上插件、`/home`、备份现在指向同一个库。
+- **家页面同源**：`client.js` 不再写死 `http://127.0.0.1:60080/home`；插件通过 DSH `webServer` 注册 `GET /life-innovation/home`，换入口端口也不会失效。
+- **时区一致**：`install/home.mjs` 去掉固定 `Asia/Shanghai`，与她的生活线一样按服务器本地日历分天；24 小时条支持 DST 天，梦只显示当天。
+- **合并补齐**：`merge` 搬运回收站；合并后书本绝对路径失效时，`hands` 按文件名在 `<home>/books` 找回并落库，找不到就允许重下，不再把坏路径当已读。
+- **入口与备份**：`entry.mjs` 校验端口（非法回退 60080）；`backup.ps1` 转义单引号，`O'Brien` 这类路径不再把脚本写坏。
+- **日志**：归档日志按 `rhythm.closed.closed` 逐条打印，不再输出 undefined。
+- 测试：18 个文件，新增 `tests/review3.test.mjs`；`TZ=UTC npm test` 全绿。
+
 ## 0.2.0 — 2026-11-05
 
 通用化：插件不替用户给 agent 起名。
