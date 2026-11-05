@@ -95,7 +95,7 @@ function Migrate-ProfileBundles([string]$path) {
 }
 
 # 在 patch 文本里 upsert 唯一的 life-innovation（兼容旧 id jingjing-memory）home 覆盖项。
-function Set-MemoryOverride([string]$text, [string]$home, [bool]$appendIfMissing) {
+function Set-MemoryOverride([string]$text, [string]$homePath, [bool]$appendIfMissing) {
   $nl = "`n"
   if ($text.Contains("`r`n")) { $nl = "`r`n" }
   $lines = New-Object System.Collections.Generic.List[string]
@@ -123,7 +123,7 @@ function Set-MemoryOverride([string]$text, [string]$home, [bool]$appendIfMissing
 
   if ($blocks.Count -eq 0) {
     if (-not $appendIfMissing) { return $text }
-    $block = $nl + '- id: life-innovation' + $nl + "  name: 'life-innovation'" + $nl + '  config:' + $nl + ('    home: ' + $home) + $nl
+    $block = $nl + '- id: life-innovation' + $nl + "  name: 'life-innovation'" + $nl + '  config:' + $nl + ('    home: ' + $homePath) + $nl
     if ($text.Length -eq 0) { return $block.TrimStart("`r", "`n") }
     if (-not $text.EndsWith("`n")) { $text += $nl }
     return ($text + $block)
@@ -153,8 +153,8 @@ function Set-MemoryOverride([string]$text, [string]$home, [bool]$appendIfMissing
   if ($homeIdx -ge 0) {
     $ind = $lines[$homeIdx].Length - $lines[$homeIdx].TrimStart().Length
     $old = ($lines[$homeIdx] -replace '^\s*home:\s*', '').Trim()
-    if ((Normalize-PathValue $old) -ne (Normalize-PathValue $home)) {
-      $lines[$homeIdx] = (' ' * $ind) + 'home: ' + $home
+    if ((Normalize-PathValue $old) -ne (Normalize-PathValue $homePath)) {
+      $lines[$homeIdx] = (' ' * $ind) + 'home: ' + $homePath
     }
   } else {
     $cfgIdx = -1
@@ -163,11 +163,11 @@ function Set-MemoryOverride([string]$text, [string]$home, [bool]$appendIfMissing
     }
     if ($cfgIdx -ge 0) {
       $cfgIndent = $lines[$cfgIdx].Length - $lines[$cfgIdx].TrimStart().Length
-      $lines.Insert($cfgIdx + 1, ((' ' * ($cfgIndent + 2)) + 'home: ' + $home))
+      $lines.Insert($cfgIdx + 1, ((' ' * ($cfgIndent + 2)) + 'home: ' + $homePath))
     } else {
       $lines.InsertRange($keep.Start + 1, [string[]]@(
         ((' ' * ($keep.Indent + 2)) + 'config:'),
-        ((' ' * ($keep.Indent + 4)) + 'home: ' + $home)
+        ((' ' * ($keep.Indent + 4)) + 'home: ' + $homePath)
       ))
     }
   }
@@ -180,7 +180,7 @@ function Migrate-PatchFile([string]$path) {
   $orig = $text
   $text = $text -replace '@local/dsh-jingjing', 'life-innovation'
   $text = $text -replace 'dsh-jingjing', 'life-innovation'
-  $text = Set-MemoryOverride -text $text -home $DataFwd -appendIfMissing ($DataFwd -ne 'D:/jingjing-home')
+  $text = Set-MemoryOverride -text $text -homePath $DataFwd -appendIfMissing ($DataFwd -ne 'D:/jingjing-home')
   if ($text -ne $orig) {
     $hadBom = Test-Utf8Bom $path
     Copy-Item -LiteralPath $path -Destination ("{0}.bak-{1}" -f $path, $Stamp)

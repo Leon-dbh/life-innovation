@@ -2,7 +2,12 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。鲸鲸是她的名字，不是插件的名字。
 
-## 0.1.1 — 2026-11-06
+## 0.1.2 — 2026-11-05
+
+- 修复 `install.ps1` 里 `Set-MemoryOverride` 的参数 `$home` 与 PowerShell 只读自动变量 `$HOME` 冲突、迁移 home 时直接崩的问题（改名 `$homePath`）。0.1.1 的安装脚本在“已有另一个 home 的 profile 上重装”时会触发，请用 0.1.2。
+- 干净 `DSH_HOME` 冒烟验证：bundles 含 `life-innovation`、patch 只有一条 `- id: life-innovation`、`config.home` 被正确覆写、`--dump-config` 能解析出 `preset-jingjing-chat`。
+
+## 0.1.1 — 2026-11-05
 
 按独立 review（`review-dsh-jingjing-739c7a0.md`）修的一轮。
 

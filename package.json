@@ -1,6 +1,6 @@
 {
   "name": "life-innovation",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "type": "module",
   "description": "给一个常驻 DSH agent 的记忆与真实生活线（人格、记忆、日子都在一个包里）",
