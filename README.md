@@ -62,7 +62,7 @@ dsh --profile jingjing --port 60081 --no-open
 
 手动装（不跑脚本）：`dsh plugin --profile jingjing add D:/workspace_1/plugins/life-innovation`。
 
-## 她的家（M3）
+## 她的数据（M3）
 
 全部数据都在 `home` 下，换机器只搬这一个目录：
 
@@ -81,6 +81,15 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/jingjing.sqli
 导入默认不覆盖已有库（要覆盖加 `--force`，会先留 `.bak-<时间>`）；日记按文件名合并；导入后重新点数，数字对不上就报错——不假装成功。
 
 存档：`node tools/backup.mjs --db … --data … --keep 14`（计划任务跑的就是它）。
+
+## 她的家页面（M5）
+
+固定入口 `http://127.0.0.1:60080/home` 是只读仪表盘：今天做了什么、记得关于你的事、关系、梗概、梦（梦会标「不是真事」）。页面直接以只读连接读同一个 SQLite，不写库、不调模型、不替她说话；所有文本转义，90 秒自动刷新。
+
+会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`，点开就是同一页。
+
+页面只列「今天」；最近七天用她的 `jingjing_days` 工具。如果安装时改了 `-EntryPort`，`client.js` 里默认的 `60080` 也要同步改。
+
 
 ## 记忆（M1）
 

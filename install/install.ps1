@@ -371,17 +371,20 @@ Step "5. 开机自启 + 固定入口（登录时启动守护进程，默认端�
 $serviceDir = Join-Path $DataHome 'service'
 $svcSrc = Join-Path $here 'service.ps1'
 $entrySrc = Join-Path $here 'entry.mjs'
+$homeSrc = Join-Path $here 'home.mjs'
 if ($NoService) {
   Info '按参数跳过（可以以后重跑本脚本，或手动注册计划任务）'
 } elseif (-not (Test-Path $svcSrc)) {
   Warn "缺少 $svcSrc，跳过服务注册"
 } else {
+  if (-not (Test-Path $homeSrc)) { throw "缺少 $homeSrc——固定入口的 /home 页面需要它" }
   $svcText = Get-Content -Raw -Encoding UTF8 -Path $svcSrc
   $svcText = $svcText.Replace('@DATA_HOME@', $DataHome).Replace('@DSH_HOME@', $DshHome).Replace('@PROFILE@', $Profile).Replace('@PORT@', [string]$Port).Replace('@ENTRY_PORT@', [string]$EntryPort)
   Run-If {
     New-Item -ItemType Directory -Force -Path $serviceDir | Out-Null
     [IO.File]::WriteAllText((Join-Path $serviceDir 'service.ps1'), $svcText, (New-Object Text.UTF8Encoding($true)))
     Copy-Item $entrySrc (Join-Path $serviceDir 'entry.mjs') -Force
+    Copy-Item $homeSrc (Join-Path $serviceDir 'home.mjs') -Force
     $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
     $runValue = 'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $serviceDir 'service.ps1') + '"'
     New-Item -Path $runKey -Force | Out-Null

@@ -1,30 +1,41 @@
 {
   "name": "life-innovation",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": false,
   "type": "module",
   "description": "给一个常驻 DSH agent 的记忆与真实生活线（人格、记忆、日子都在一个包里）",
   "main": "index.js",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "index.js",
+    "client.js",
     "cordis.patch.yml",
     "README.md",
     "lib",
     "tools",
-    "install"
+    "install",
+    "locale/*.json"
   ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
     }
   },
   "scripts": {
-    "test": "node tests/memory.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/packcache.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/portability.test.mjs && node tests/merge.test.mjs && node tests/lifecycle.test.mjs && node tests/summaries.test.mjs && node tests/jsonschema.test.mjs && node tests/prompt_policy.test.mjs && node tests/review-fixes.test.mjs && node tests/rhythm.test.mjs && node tests/hands.test.mjs && node tests/review2.test.mjs",
+    "test": "node tests/memory.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/packcache.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/portability.test.mjs && node tests/merge.test.mjs && node tests/lifecycle.test.mjs && node tests/summaries.test.mjs && node tests/jsonschema.test.mjs && node tests/prompt_policy.test.mjs && node tests/review-fixes.test.mjs && node tests/rhythm.test.mjs && node tests/hands.test.mjs && node tests/review2.test.mjs && node tests/home.test.mjs",
     "pack": "npm pack",
-    "check": "node --check index.js && node --check lib/store.js && node --check lib/life.js && node --check lib/summaries.js && node --check lib/merge.js && node --check lib/tools.js && node --check lib/rhythm.js && node --check lib/view.js && node --check lib/hands.js && node --check lib/backup.js && node --check lib/notify.js"
+    "check": "node --check index.js && node --check lib/store.js && node --check lib/life.js && node --check lib/summaries.js && node --check lib/merge.js && node --check lib/tools.js && node --check lib/rhythm.js && node --check lib/view.js && node --check lib/hands.js && node --check lib/backup.js && node --check lib/notify.js && node --check install/home.mjs && node --check client.js"
   },
   "license": "MIT",
   "engines": {

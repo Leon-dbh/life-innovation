@@ -1,4 +1,4 @@
-﻿# 鲸鲸的守护进程（Windows，由登录时启动的 HKCU Run 键运行）。
+# 鲸鲸的守护进程（Windows，由登录时启动的 HKCU Run 键运行）。
 #
 # 它做四件事：
 #   1. 起一个固定入口 127.0.0.1:<EntryPort>，把请求 302 到当前这次启动的带 token 地址
@@ -94,6 +94,7 @@ function Start-EntryProxy {
   if ($NoProxy -or -not (Test-Path $entryJs)) { return $null }
   $env:JINGJING_ENTRY_PORT = [string]$EntryPort
   $env:JINGJING_URL_FILE = $urlFile
+  $env:JINGJING_HOME = $DataHome
   $entryArg = '"' + $entryJs + '"'
   $p = Start-Process -FilePath $node -ArgumentList @($entryArg) -WorkingDirectory $DataHome -PassThru -WindowStyle Hidden
   Write-Log ('固定入口已启动：http://127.0.0.1:{0}/  (pid {1})' -f $EntryPort, $p.Id)

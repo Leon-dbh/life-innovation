@@ -13,10 +13,14 @@
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
+import { renderHome, renderHomeError, homeFilePath } from './home.mjs'
 
 const port = Number(process.env.JINGJING_ENTRY_PORT || 60080)
 const urlFile = process.env.JINGJING_URL_FILE
   || path.join(process.env.JINGJING_HOME || 'D:/jingjing-home', 'state', 'web-url.txt')
+// 家的位置优先看环境变量，其次从 state/web-url.txt 的上一级反推，
+// 这样即使 DataHome 不是默认目录，/home 也能找到同一套数据。
+const dataHome = process.env.JINGJING_HOME || path.dirname(path.dirname(urlFile))
 
 function currentUrl() {
   try {
@@ -52,6 +56,28 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  if (pathname === '/home' || pathname === '/home/') {
+    try {
+      const html = renderHome({
+        home: dataHome,
+        dbPath: homeFilePath(dataHome),
+        now: Date.now(),
+        chatUrl: currentUrl(),
+      })
+      res.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'referrer-policy': 'no-referrer',
+        'x-content-type-options': 'nosniff',
+      })
+      res.end(html)
+    } catch (error) {
+      res.writeHead(503, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+      res.end(renderHomeError(error && error.message ? error.message : String(error)))
+    }
+    return
+  }
+
   if (pathname === '/' || pathname === '/index.html') {
     const url = currentUrl()
     if (!url) {
@@ -65,7 +91,7 @@ const server = http.createServer((req, res) => {
   }
 
   res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
-  res.end('没有这个页面。回 / 就是她的入口。\n')
+  res.end('没有这个页面。回 / 是她的房间，/home 是她的家。\n')
 })
 
 server.on('error', (error) => {

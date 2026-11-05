@@ -2,6 +2,14 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。鲸鲸是她的名字，不是插件的名字。
 
+## 0.1.7 — 2026-11-05
+
+- 新增只读「家」页面：固定入口 `/home`，今天的时间线（带 `raw:N`/`act:N` 证据）、节律、记得的事、关系、梗概、梦（标「不是真事」）；90 秒刷新，移动端单列。
+- 新增 `client.js`：会话标题栏「家」按钮，注册到 `conversation.session.header.actions`。
+- `install/home.mjs` 服务端渲染；`entry.mjs` 新增 `/home`；`install.ps1` 复制 `home.mjs`；`service.ps1` 传 `JINGJING_HOME`。
+- 新增 `tests/home.test.mjs`：缺库页、生产形状、XSS 转义、只读（mtime/size 不变）、事实去重、摘要清洗。
+- 页面不加载外网资源，SQLite 只读连接，所有动态文本转义。
+
 ## 0.1.6 — 2026-11-05
 
 - 修 `install.ps1` 生成的 `backup.ps1`：`$ErrorActionPreference` 从 `Stop` 改为 `Continue`。Node 的 SQLite ExperimentalWarning 写到 stderr 时，PowerShell 5.1 会抛 `NativeCommandError`，备份虽然已经导出成功，计划任务仍记为失败。
