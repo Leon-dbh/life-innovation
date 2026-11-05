@@ -29,12 +29,20 @@
 **外发账本**
 - `outbox` 四态：`pending → sent / uncertain / failed`，单向；没确认一律 `uncertain`。渠道（微信等）留给后续版本，本版不接。
 
+**记得住，也找得回**
+- 召回不按时间倒序：CJK bigram 切词 + IDF + 新鲜度 + 情绪权重，`memory_find` 每条带 `score` 和「为什么是它」。
+- 淡忘只影响排序：普通记忆 30 天权重减半，带情绪的 7 天减半，原话不删。
+- 90 天前的原话归档到 `raw_archive`，id 不变，证据仍然有效。
+- 回收站：`recycleRaw` 移出召回，`node tools/restore.mjs --list/--id N` 放回，原 id 能还原就还原。
+- `jingjing_status` 只读返回原话/归档/梗概/要点/画像/动作/日子条数、今天的日子、最近一次注入和召回。
+- 梗概按「上次梗概之后的新原话」触发，水位用最后一条原话 id，同毫秒不会漏；空日子不写日记。
+
 **工程**
 - 单包：仓库根目录就是插件，`dsh.bundle.patch` 指到 `cordis.patch.yml`。
 - 安装：`install/install.ps1`（幂等）写 profile、装插件、注册每日备份、写 HKCU Run 自启。
 - 守护：`install/service.ps1` + `install/entry.mjs`，web 挂了 5 秒拉起，固定入口 `http://127.0.0.1:60080/`（302 到当前 token 地址）。
 - 数据搬家：`tools/export.mjs` / `import.mjs`（`--merge` 合并另一台机器）/ `merge.mjs` / `backup.mjs`。
-- 测试：8 个 `node --test` 文件（merge / memory / life / paths / tools / outbox / packcache / portability）。
+- 测试：12 个测试文件（memory / life / lifecycle / summaries / tools / outbox / packcache / paths / portability / merge / jsonschema / prompt_policy），`npm test` 全绿；CI 跑 Windows + Ubuntu、Node 22/24。
 - Windows 安装脚本目前只做 Windows；macOS / Linux 待补。
 
 **边界**
