@@ -117,6 +117,24 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/jingjing.sqli
 - **回收站**：`store.recycleRaw(id)` 从召回和阅读里拿走，payload 留在 `recycle` 表里可查；放回去用 `node tools/restore.mjs --list` / `--id N`（原 id 空着就放回原 id，证据 ref 不变）。
 - **截断按行**：记忆包放不下时以整行为单位停住，不再把「（证据：raw:12」切成半个词。
 
+## 节律、归档与梦（M3.5）
+
+没人在说话的时候，时间也在走。状态只有五种，全部由时钟和真实事件推导，没有剧本：
+
+| 状态 | 什么时候 | 她做什么 |
+| --- | --- | --- |
+| 醒着 `awake` | 最近 10 分钟内有人说话 | 正常聊天 |
+| 安静 `quiet` | 8–23 点，安静 ≥20 分钟 | 可以写日记、翻旧记忆；每 3 小时最多一次 `memory_find`，落真实动作 |
+| 夜里 `night` | 23–8 点 | 不主动找人；只归档、做梦 |
+| 今天已经收起来 `closed` | 23:00 归档之后 | 当天冻结，不再改写日记 |
+| 没在运行 `offline` | 宿主关机/重启 | 只记一段空档，不补写任何活动 |
+
+- **23:00 归档**：安静满 30 分钟才收；写 `diary/YYYY-MM-DD.md`，落一条 `close_day` 动作（只成功一次）。归档后当天冻结。
+- **梦**：夜里归档后，从近 3 天真实原话 + 真实动作里取素材写一段梦，`non_factual=1`，证据是 `raw:N`/`act:N`；梦不进生活块、不进事实，日记里单列「梦（不是真事）」。
+- **只读视图**：工具 `jingjing_days({days:1..7})` 返回状态段、真实做过的事（带证据）、空档、动作账本、梦。
+
+状态注入在 `jingjing:rhythm`（order 850），每小时间刷新。
+
 ## 主动开口（M2.1）
 
 - preset 挂 `@deepseek-ai/dsh-tool-schedule`，她可自己定闹钟（`schedule_create/list/update/delete`）。

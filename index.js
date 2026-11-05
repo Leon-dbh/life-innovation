@@ -11,6 +11,7 @@ import { extractAssertions } from './lib/extract.js'
 import { maybeSummarize } from './lib/summaries.js'
 import { createPackCache } from './lib/packCache.js'
 import { syncDay, tick } from './lib/life.js'
+import { reconcileOnStart, syncPhase, tickRhythm, rhythmText } from './lib/rhythm.js'
 import { registerMemoryTools } from './lib/tools.js'
 import { resolvePaths } from './lib/paths.js'
 import * as observe from './lib/observe.js'
@@ -78,6 +79,13 @@ export function apply(ctx, config = {}) {
   const orphans = store.markOrphanActions()
   if (orphans) ctx.logger?.warn?.(`[jingjing] 有 ${orphans} 条动作停在 called，已标记 uncertain`)
 
+  // 启动时对账节律：上一个进程关掉之后的时间记成 offline，不补写她在干嘛。
+  try {
+    reconcileOnStart({ store, now: Date.now() })
+  } catch (error) {
+    ctx.logger?.warn?.(`[jingjing] 节律对账失败：${error?.message || error}`)
+  }
+
   // 给她三个只读工具：按关键词找原话、按 ref 读全文、看自己现在的状态。
   guarded('记忆工具', () => registerMemoryTools({ ctx, store, observe }))
 
@@ -105,6 +113,22 @@ export function apply(ctx, config = {}) {
     required: true,
     interpolate: false,
     text: () => nowText(),
+  }))
+
+  // 当前节律：醒着/安静/夜里/今天已归档/没在运行。只由时钟和真实事件推导。
+  guarded('节律注入', () => ctx.systemPrompt.context({
+    name: 'jingjing:rhythm',
+    order: 850,
+    required: true,
+    interpolate: false,
+    text: () => {
+      try {
+        return rhythmText({ store, now: Date.now() })
+      } catch (error) {
+        ctx.logger?.warn?.(`[jingjing] 节律文本失败：${error?.message || error}`)
+        return ''
+      }
+    },
   }))
 
   const summarizeIfDue = (sessionId, ts) => {
@@ -183,6 +207,8 @@ export function apply(ctx, config = {}) {
       }
       // 无论谁的句子，都重算今天的日子（幂等；只由真实原话/动作聚合）。
       syncDay({ store, now: ts })
+      // 有人说话、或她刚回完，状态立刻切到醒着；其余状态由 60 秒 tick 推进。
+      syncPhase({ store, now: ts })
     } catch (error) {
       ctx.logger?.warn?.(`[jingjing] 记这一轮失败：${error?.message || error}`)
     }
@@ -192,11 +218,15 @@ export function apply(ctx, config = {}) {
   // 顺手做一次很轻的归档维护：90 天前的原话搬到 raw_archive（id 不变，证据仍有效）。
   const timer = setInterval(() => {
     try {
-      store.archiveRawBefore(Date.now() - 90 * 86400000)
-      const done = tick({ store, now: Date.now(), dir: diaryDir })
+      const now = Date.now()
+      store.archiveRawBefore(now - 90 * 86400000)
+      const rhythm = tickRhythm({ store, now, dir: diaryDir })
+      if (rhythm.closed) ctx.logger?.info?.(`[jingjing] 归档了 ${rhythm.closed.date}（${rhythm.closed.count} 件事）`)
+      if (rhythm.dream) ctx.logger?.info?.(`[jingjing] 做了个梦（非事实层）`)
+      const done = tick({ store, now, dir: diaryDir })
       if (done) ctx.logger?.info?.(`[jingjing] 写了日记 ${done.file}`)
     } catch (error) {
-      ctx.logger?.warn?.(`[jingjing] 写日记失败：${error?.message || error}`)
+      ctx.logger?.warn?.(`[jingjing] 节律/日记失败：${error?.message || error}`)
     }
   }, tickMs)
   timer.unref?.()

@@ -75,7 +75,7 @@ const store = new MemoryStore(path.join(dir, 'schema.sqlite'))
 const registry = new Map()
 const ctx = { tools: { register: (def) => { registry.set(def.name, def); return () => registry.delete(def.name) } } }
 const dispose = registerMemoryTools({ ctx, store })
-assert.equal(registry.size, 3, '三个工具都要注册')
+assert.equal(registry.size, 4, '四个工具都要注册')
 
 for (const [name, def] of registry) {
   assert.equal(typeof def.description, 'string')

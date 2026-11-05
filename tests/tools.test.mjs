@@ -22,7 +22,7 @@ const registry = new Map()
 const ctx = { tools: { register: (def) => { registry.set(def.name, def); return () => registry.delete(def.name) } } }
 const observe = { snapshot: () => ({ packs: [{ chars: 520, cache: 'build', sections: [] }], recalls: [] }) }
 const dispose = registerMemoryTools({ ctx, store, observe })
-assert.deepEqual([...registry.keys()].sort(), ['jingjing_status', 'memory_find', 'memory_read'])
+assert.deepEqual([...registry.keys()].sort(), ['jingjing_days', 'jingjing_status', 'memory_find', 'memory_read'])
 
 const find = registry.get('memory_find')
 const out = await find.execute({ query: '西湖', limit: 20 })
@@ -50,6 +50,13 @@ assert.match(act.who, /动作/)
 const bad = await read.execute({ ref: 'nope' })
 assert.match(bad.text, /看不懂/)
 
+const days = registry.get('jingjing_days')
+const dv = await days.execute({ days: 1 })
+assert.equal(dv.days.length, 1, '只读视图给最近一天')
+assert.match(dv.days[0].date, /^\d{4}-\d{2}-\d{2}$/)
+assert.ok(Array.isArray(dv.days[0].blocks))
+assert.ok(dv.days[0].actions.some((a) => a.tool === 'write_diary'))
+
 const status = registry.get('jingjing_status')
 const st = await status.execute({})
 assert.equal(st.stats.raw, 11)
@@ -61,4 +68,4 @@ dispose()
 assert.equal(registry.size, 0)
 store.close()
 fs.rmSync(dir, { recursive: true, force: true })
-console.log('OK: memory_find / memory_read / jingjing_status（召回按相关度而非时间）')
+console.log('OK: memory_find / memory_read / jingjing_status / jingjing_days（召回按相关度而非时间）')
