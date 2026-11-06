@@ -44,13 +44,14 @@ dsh plugin --profile life-innovation add github:Leon-dbh/life-innovation
 
 前置：Windows、Node.js 22+、npm；pnpm 可选（没有会自动装）；`DEEPSEEK_API_KEY` 在用户环境变量里。
 
-安装脚本做五件事，幂等：
+安装脚本做六件事，幂等：
 
 1. 检查 node/npm/pnpm 与 API key；
 2. 建 `D:\life-innovation-home\{state,diary,logs,backups}`；
 3. 在 `%DSH_HOME%\profiles\life-innovation` 写 `package.json` 与 `cordis.patch.yml`（默认 preset `life-innovation`）；
 4. `dsh plugin --profile life-innovation add <本插件>`；
-5. 注册计划任务 `LifeInnovationDailyBackup`（每天 03:30，留 14 份）。
+5. 注册计划任务 `LifeInnovationDailyBackup`（每天 03:30，留 14 份）；
+6. 升级时清掉 0.1.x 留下的旧自启项 `JingjingService` 与旧备份任务 `JingjingDailyBackup`，避免两个实例/两套备份同时跑。
 
 常用参数：
 
@@ -59,9 +60,12 @@ dsh plugin --profile life-innovation add github:Leon-dbh/life-innovation
 -AgentName '名字'              # 给你的 agent 起名；不填就没有预设名字
 -Profile my-agent              # 换 DSH profile 名
 -EntryPort 60080               # 固定入口端口
+-ForceNewInstance              # 忽略旧家，强制新建空实例
 -DryRun                        # 只看会做什么
 -Force                         # 备份后重写已有 profile 文件
 ```
+
+> 从 0.1.x 升级：不带 `-DataHome` 重跑安装器时，如果 `D:\jingjing-home\state\jingjing.sqlite` 还在、新家还没有 `state`，会按升级处理，继续用旧家并沿用 `jingjing` profile；已有 patch 里的 `home`/`dbPath`/`agentName` 会被同步更新（不再只改 `home`）。确实想新开一个空实例，显式加 `-ForceNewInstance`。旧实例/旧备份不会被删除，脚本只会移除旧自启项和旧计划任务。
 
 启动：
 
@@ -265,7 +269,7 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.2.0.tgz
 ## 测试
 
 ```powershell
-npm test          # 18 个测试文件
+npm test          # 19 个测试文件
 npm run check     # 语法检查
 ```
 

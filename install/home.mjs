@@ -400,6 +400,8 @@ function collectPreviousDays({ home, dbPath, now, days }) {
 }
 
 function pastDayCard(data) {
+  // 同一 dbPath 下某天缺库的概率极低，但逐日读时不能因为一天 missing 就整页 503。
+  if (!data || data.missing) return ''
   const dayStart = startOfDay(data.today)
   const total = nextDayStart(data.today) - dayStart
   const last = data.phases[data.phases.length - 1] || null
@@ -673,16 +675,4 @@ export function readHomeDbHint(home) {
   }
 }
 
-export function homeDiaryDir(home) {
-  return path.join(home, 'diary')
-}
 
-export function readDiaryPeek(home, date) {
-  try {
-    const file = path.join(homeDiaryDir(home), `${date}.md`)
-    if (!fs.existsSync(file)) return ''
-    return fs.readFileSync(file, 'utf8').slice(0, 600)
-  } catch {
-    return ''
-  }
-}

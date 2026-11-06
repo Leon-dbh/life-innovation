@@ -24,6 +24,7 @@ param(
   [switch]$SkipBackupTask,
   [switch]$StartService,
   [switch]$Force,
+  [switch]$ForceNewInstance,
   [switch]$DryRun
 )
 
@@ -96,7 +97,14 @@ function Migrate-ProfileBundles([string]$path) {
 }
 
 # 在 patch 文本里 upsert 唯一的 life-innovation（兼容旧 id jingjing-memory）home 覆盖项。
-function Set-MemoryOverride([string]$text, [string]$homePath, [bool]$appendIfMissing) {
+function Quote-Yaml([string]$value) {
+  return "'" + $value.Replace("'", "''") + "'"
+}
+
+# 在 patch 文本里 upsert 唯一的 life-innovation（兼容旧 id jingjing-memory）的 config 项。
+# home 总是跟随本次 -DataHome；dbPath 也一起更新（否则插件写旧库、备份写新库）；
+# agentName 只在显式传了 -AgentName 时更新，没传就保留用户原来的名字。
+function Set-MemoryOverride([string]$text, [string]$homePath, [string]$dbPath, [string]$agentName, [bool]$appendIfMissing) {
   $nl = "`n"
   if ($text.Contains("`r`n")) { $nl = "`r`n" }
   $lines = New-Object System.Collections.Generic.List[string]
@@ -124,7 +132,15 @@ function Set-MemoryOverride([string]$text, [string]$homePath, [bool]$appendIfMis
 
   if ($blocks.Count -eq 0) {
     if (-not $appendIfMissing) { return $text }
-    $block = $nl + '- id: life-innovation' + $nl + "  name: 'life-innovation'" + $nl + '  config:' + $nl + ('    home: ' + $homePath) + $nl
+    $blockLines = @(
+      $nl + '- id: life-innovation',
+      "  name: 'life-innovation'",
+      '  config:',
+      ('    home: ' + (Quote-Yaml $homePath)),
+      ('    dbPath: ' + (Quote-Yaml $dbPath))
+    )
+    if ($agentName) { $blockLines += ('    agentName: ' + (Quote-Yaml $agentName)) }
+    $block = ($blockLines -join $nl) + $nl
     if ($text.Length -eq 0) { return $block.TrimStart("`r", "`n") }
     if (-not $text.EndsWith("`n")) { $text += $nl }
     return ($text + $block)
@@ -147,42 +163,81 @@ function Set-MemoryOverride([string]$text, [string]$homePath, [bool]$appendIfMis
   }
 
   $lines[$keep.Start] = $lines[$keep.Start] -replace 'jingjing-memory', 'life-innovation'
-  $homeIdx = -1
+
+  # 找/建 config: 块；只改 config 下的键，不碰其他配置。
+  $cfgIdx = -1
   for ($j = $keep.Start + 1; $j -le $keep.End; $j++) {
-    if ($lines[$j] -match '^\s*home:\s*') { $homeIdx = $j; break }
+    if ($lines[$j] -match '^\s*config:\s*$') { $cfgIdx = $j; break }
   }
-  if ($homeIdx -ge 0) {
-    $ind = $lines[$homeIdx].Length - $lines[$homeIdx].TrimStart().Length
-    $old = ($lines[$homeIdx] -replace '^\s*home:\s*', '').Trim()
-    if ((Normalize-PathValue $old) -ne (Normalize-PathValue $homePath)) {
-      $lines[$homeIdx] = (' ' * $ind) + 'home: ' + $homePath
+  if ($cfgIdx -lt 0) {
+    $cfgIndent = $keep.Indent + 2
+    $lines.Insert($keep.Start + 1, ((' ' * $cfgIndent) + 'config:'))
+    $cfgIdx = $keep.Start + 1
+    $keep.End += 1
+  }
+  $cfgIndent = $lines[$cfgIdx].Length - $lines[$cfgIdx].TrimStart().Length
+  $cfgEnd = $keep.End
+  for ($j = $cfgIdx + 1; $j -le $keep.End; $j++) {
+    if ($lines[$j].Trim() -eq '') { continue }
+    $ind = $lines[$j].Length - $lines[$j].TrimStart().Length
+    if ($ind -le $cfgIndent) { $cfgEnd = $j - 1; break }
+  }
+
+  $values = [ordered]@{ home = $homePath; dbPath = $dbPath }
+  if ($agentName) { $values['agentName'] = $agentName }
+  foreach ($key in $values.Keys) {
+    $value = [string]$values[$key]
+    $idx = -1
+    for ($j = $cfgIdx + 1; $j -le $cfgEnd; $j++) {
+      if ($lines[$j] -match ('^\s*' + [regex]::Escape($key) + ':\s*')) { $idx = $j; break }
     }
-  } else {
-    $cfgIdx = -1
-    for ($j = $keep.Start + 1; $j -le $keep.End; $j++) {
-      if ($lines[$j] -match '^\s*config:\s*$') { $cfgIdx = $j; break }
-    }
-    if ($cfgIdx -ge 0) {
-      $cfgIndent = $lines[$cfgIdx].Length - $lines[$cfgIdx].TrimStart().Length
-      $lines.Insert($cfgIdx + 1, ((' ' * ($cfgIndent + 2)) + 'home: ' + $homePath))
+    if ($idx -ge 0) {
+      $ind = $lines[$idx].Length - $lines[$idx].TrimStart().Length
+      $lines[$idx] = (' ' * $ind) + $key + ': ' + (Quote-Yaml $value)
     } else {
-      $lines.InsertRange($keep.Start + 1, [string[]]@(
-        ((' ' * ($keep.Indent + 2)) + 'config:'),
-        ((' ' * ($keep.Indent + 4)) + 'home: ' + $homePath)
-      ))
+      $insertAt = $cfgEnd + 1
+      $lines.Insert($insertAt, ((' ' * ($cfgIndent + 2)) + $key + ': ' + (Quote-Yaml $value)))
+      $cfgEnd += 1
+      $keep.End += 1
     }
   }
   return ($lines -join $nl)
 }
 
-# 迁移 patch：旧插件名 -> life-innovation，并把唯一的 home 覆盖项改成 -DataHome。
+# 升级后旧版本的自启/计划任务还留着，会同时拉起两个实例、备份两份库。
+# 只删本产品旧版本用过的两个固定名字；查询/删除失败只告警，不阻断安装。
+function Remove-LegacyRunValue {
+  $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+  try {
+    $prop = Get-ItemProperty -Path $runKey -Name 'JingjingService' -ErrorAction SilentlyContinue
+    if ($prop -and $prop.PSObject.Properties['JingjingService']) {
+      Remove-ItemProperty -Path $runKey -Name 'JingjingService' -ErrorAction Stop
+      Info '已移除旧开机自启 JingjingService'
+    }
+  } catch {
+    Warn ("旧自启项 JingjingService 清理失败：{0}" -f $_.Exception.Message)
+  }
+}
+function Remove-LegacyBackupTask {
+  try {
+    $oldTask = Get-ScheduledTask -TaskName 'JingjingDailyBackup' -ErrorAction SilentlyContinue
+    if ($oldTask) {
+      Unregister-ScheduledTask -TaskName 'JingjingDailyBackup' -Confirm:$false -ErrorAction Stop
+      Info '已移除旧计划任务 JingjingDailyBackup'
+    }
+  } catch {
+    Warn ("旧计划任务 JingjingDailyBackup 清理失败：{0}" -f $_.Exception.Message)
+  }
+}
+
+# 迁移 patch：旧插件名 -> life-innovation，并把 home/dbPath（以及显式给出的 agentName）改成本次安装值。
 function Migrate-PatchFile([string]$path) {
   $text = Read-Utf8Text $path
   $orig = $text
   $text = $text -replace '@local/dsh-jingjing', 'life-innovation'
   $text = $text -replace 'dsh-jingjing', 'life-innovation'
   $text = $text -replace 'default:\s*jingjing-chat', 'default: life-innovation'
-  $text = Set-MemoryOverride -text $text -homePath $DataFwd -appendIfMissing ($DataFwd -ne 'D:/life-innovation-home' -or $AgentName)
+  $text = Set-MemoryOverride -text $text -homePath $DataFwd -dbPath $DbPath -agentName $AgentName -appendIfMissing ($DataFwd -ne 'D:/life-innovation-home' -or $AgentName)
   if ($text -ne $orig) {
     $hadBom = Test-Utf8Bom $path
     Copy-Item -LiteralPath $path -Destination ("{0}.bak-{1}" -f $path, $Stamp)
@@ -196,6 +251,22 @@ if (-not $PluginPath) { $PluginPath = (Resolve-Path (Join-Path $here '..')).Path
 $PluginPath = $PluginPath.TrimEnd('\')
 $DataHome = $DataHome.TrimEnd('\')
 $DshHome = $DshHome.TrimEnd('\')
+# 0.1.x 的默认家是 D:\jingjing-home，0.2.x 改成了 D:\life-innovation-home。
+# 只升级插件、不重跑安装器时，插件自己会回退旧库；重跑安装器时这里也按升级处理，
+# 避免用默认参数一跑就新开一个空实例。
+$LegacyDataHome = 'D:\jingjing-home'
+$LegacyProfileName = 'jingjing'
+$LegacyDefaultDb = Join-Path $LegacyDataHome 'state\jingjing.sqlite'
+$NewDefaultHome = 'D:\life-innovation-home'
+if (-not $PSBoundParameters.ContainsKey('DataHome') -and -not $ForceNewInstance -and -not (Test-Path (Join-Path $DataHome 'state\life-innovation.sqlite')) -and (Test-Path $LegacyDefaultDb)) {
+  Warn ("发现旧家 {0}（含旧记忆库），按升级处理，继续使用旧家；要新建空实例请显式 -DataHome ... -ForceNewInstance" -f $LegacyDataHome)
+  $DataHome = $LegacyDataHome
+  if (-not $PSBoundParameters.ContainsKey('Profile') -and (Test-Path (Join-Path $DshHome ("profiles\{0}" -f $LegacyProfileName)))) {
+    $Profile = $LegacyProfileName
+  }
+} elseif ($DataHome -ne $LegacyDataHome -and (Test-Path $LegacyDefaultDb) -and -not $ForceNewInstance) {
+  Warn ("旧家 {0} 仍在（含旧记忆库）；本次使用 {1}。旧实例/旧备份不会被自动删除。" -f $LegacyDataHome, $DataHome)
+}
 $DataFwd = $DataHome.Replace('\', '/')
 $PluginFwd = $PluginPath.Replace('\', '/')
 $ProfileDir = Join-Path $DshHome (Join-Path 'profiles' $Profile)
@@ -260,7 +331,9 @@ $pkg = @"
   }
 }
 "@
-$AgentNameYaml = $AgentName.Replace("'", "''")
+$AgentNameYaml = Quote-Yaml $AgentName
+$DataYaml = Quote-Yaml $DataFwd
+$DbYaml = Quote-Yaml $DbPath
 $memoryOverride = ''
 if ($DataFwd -ne 'D:/life-innovation-home' -or $AgentName) {
   $memoryOverride = @"
@@ -268,8 +341,8 @@ if ($DataFwd -ne 'D:/life-innovation-home' -or $AgentName) {
 - id: life-innovation
   name: 'life-innovation'
   config:
-    home: $DataFwd
-    dbPath: $DbPath
+    home: $DataYaml
+    dbPath: $DbYaml
     agentName: $AgentNameYaml
 "@
 }
@@ -376,7 +449,7 @@ Run-If {
   [IO.File]::WriteAllText($backupCmd, $wrapper, [Text.Encoding]::ASCII)
   & schtasks.exe /Create /F /SC DAILY /ST 03:30 /TN "LifeInnovationDailyBackup" /TR "`"$backupCmd`"" | Out-Null
   if ($LASTEXITCODE -ne 0) { Warn "计划任务创建失败（退出码 $LASTEXITCODE）；可以手动把 $backupCmd 挂到任务计划程序。" }
-  else { Info '已注册计划任务 LifeInnovationDailyBackup' }
+  else { Info '已注册计划任务 LifeInnovationDailyBackup'; Remove-LegacyBackupTask }
 }
 
 }
@@ -393,7 +466,13 @@ if ($NoService) {
 } else {
   if (-not (Test-Path $homeSrc)) { throw "缺少 $homeSrc——固定入口的 /home 页面需要它" }
   $svcText = Get-Content -Raw -Encoding UTF8 -Path $svcSrc
-  $svcText = $svcText.Replace('@DATA_HOME@', $DataHome).Replace('@DSH_HOME@', $DshHome).Replace('@PROFILE@', $Profile).Replace('@PORT@', [string]$Port).Replace('@ENTRY_PORT@', [string]$EntryPort).Replace('@AGENT_NAME@', $AgentName).Replace('@DB_PATH@', $DbPath)
+  # 这些值会落进 service.ps1 的单引号字符串；路径/名字里有 O'Brien 这种单引号时必须翻倍。
+  $dataPs = $DataHome.Replace("'", "''")
+  $dshPs = $DshHome.Replace("'", "''")
+  $profilePs = $Profile.Replace("'", "''")
+  $agentPs = $AgentName.Replace("'", "''")
+  $dbPs = $DbPath.Replace("'", "''")
+  $svcText = $svcText.Replace('@DATA_HOME@', $dataPs).Replace('@DSH_HOME@', $dshPs).Replace('@PROFILE@', $profilePs).Replace('@PORT@', [string]$Port).Replace('@ENTRY_PORT@', [string]$EntryPort).Replace('@AGENT_NAME@', $agentPs).Replace('@DB_PATH@', $dbPs)
   Run-If {
     New-Item -ItemType Directory -Force -Path $serviceDir | Out-Null
     [IO.File]::WriteAllText((Join-Path $serviceDir 'service.ps1'), $svcText, (New-Object Text.UTF8Encoding($true)))
@@ -404,6 +483,7 @@ if ($NoService) {
     New-Item -Path $runKey -Force | Out-Null
     Set-ItemProperty -Path $runKey -Name 'LifeInnovationService' -Value $runValue
     Info '已登记开机自启：HKCU\...\Run\LifeInnovationService（登录时启动，不需要管理员）'
+    Remove-LegacyRunValue
   }
   if ($StartService -and -not $DryRun) {
     $svcPath = Join-Path $serviceDir 'service.ps1'

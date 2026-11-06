@@ -231,6 +231,7 @@ export function apply(ctx, config = {}) {
           summary: isDreamNote ? `把 ${dreamDate} 的梦记成一张便签` : args,
           callId: String(call.callId || ''),
           status: 'called',
+          meta: isDreamNote ? { dreamDate } : null,
         })
         return
       }

@@ -2,6 +2,20 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.2.5 — 2026-11-06
+
+修 0.2.4 复审里的升级路径和几个「看起来能跑、实际会错」的缝。
+
+- **旧家回退**：只升级插件、不重跑安装器时，如果新默认家不存在、旧 `D:/jingjing-home/state/jingjing.sqlite` 还在，默认回到旧家；不会因为改名让记忆「消失」。
+- **安装器升级**：不带 `-DataHome` 重跑时检测旧家并沿用旧 profile；新增 `-ForceNewInstance` 明确要求新开空实例。
+- **patch 同步**：已有 `cordis.patch.yml` 里的 `home`/`dbPath`/`agentName` 会一起更新，不再只改 `home`；YAML 值统一用单引号转义。
+- **旧任务清理**：注册新计划任务/新自启项成功后，清掉 0.1.x 的 `JingjingDailyBackup` 与 `JingjingService`，避免两个实例/两套备份。
+- **单引号路径**：service 占位符替换前把 `'` 翻倍，`O'Brien` 这类名字/路径不会让 PowerShell 解析失败。
+- **补录**：`tools/backfill.mjs` 用原话时间抽取、把 `dueAt` 写进断言。
+- **梦判据**：`toolActivity` 改看结构化 `meta.dreamDate`，不再因为便签文字里有「梦」就误记成「把梦记了下来」；梦文案也带上 action 的 summary。
+- **家页面**：过去某天缺库时跳过该卡片，不整页 503；删掉未使用的日记预览死代码。
+- 测试：19 个文件；新增 `tests/review4.test.mjs`，覆盖旧家回退、patch 同步、旧任务清理顺序、单引号、dueAt、梦 meta 与家页面边界。
+
 ## 0.2.4 — 2026-11-06
 
 修 `/home` 和插件「各读各的库」的最后一条缝。

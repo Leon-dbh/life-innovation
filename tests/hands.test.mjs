@@ -79,7 +79,9 @@ assert.match(dreamText, /关于 \d{4}-\d{2}-\d{2} 的梦（梦不是真事）/)
 assert.equal(hands.dreamNoteExists(dreamDay), true)
 assert.throws(() => hands.writeNote({ title: '再记一次', body: '重复。', dreamDate: dreamDay }), /已经记过/)
 assert.throws(() => hands.writeNote({ title: '记错了', body: '日期。', dreamDate: '2000-01-01' }), /只能记今天或昨晚/)
-assert.equal(toolActivity('note_write', '把 2026-11-05 的梦记成一张便签'), '把梦记了下来')
+assert.equal(toolActivity('note_write', '把 2026-11-05 的梦记成一张便签', { dreamDate: dreamDay }), '把梦记了下来')
+// 只有文字里带「梦」不算梦便签；结构化 meta 才是依据。
+assert.equal(toolActivity('note_write', '梦见一把伞，随手写下来'), '写了张便签')
 
 // 提示只在「昨晚的梦还没记」时出现；记过之后提示消失。
 store.appendPhase({ date: dreamDay, phase: 'quiet', startedAt: Date.now(), reason: '测试' })

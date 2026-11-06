@@ -30,7 +30,7 @@ function fresh(name) {
   assert.match(svc, /\$DbPath\s+=\s+'@DB_PATH@'/, 'service 必须有 DB 占位符')
   assert.match(svc, /LIFE_INNOVATION_DB = \$DbPath/, 'service 必须把同一个 DB 传给 dsh')
   assert.doesNotMatch(svc, /Join-Path \$DataHome 'state\\jingjing\.sqlite'/, 'service 不能自己猜旧库')
-  assert.match(ins, /Replace\('@DB_PATH@', \$DbPath\)/, 'install 必须替换 DB 占位符')
+  assert.match(ins, /Replace\('@DB_PATH@', \$dbPs\)/, 'install 必须替换 DB 占位符')
   assert.match(ins, /\$nodePs = \$nodePath\.Replace\("'", "''"\)/, 'backup.ps1 必须转义单引号')
   assert.match(client, /HOME_URL = '\/life-innovation\/home'/, '客户端必须走同源路径，不猜 60080')
   const idx = fs.readFileSync(path.join(pkg, 'index.js'), 'utf8')
