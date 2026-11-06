@@ -4,6 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { MemoryStore } from '../lib/store.js'
 import { createHands } from '../lib/hands.js'
+import { addDays, dateKey, startOfDay, toolActivity } from '../lib/life.js'
+import { rhythmText } from '../lib/rhythm.js'
 
 const BOOK_TEXT = `*** START OF THE PROJECT GUTENBERG EBOOK 测试书 ***
 
@@ -66,6 +68,27 @@ assert.ok(fs.existsSync(path.join(dir, note.path)))
 const note2 = await hands.writeNote({ title: '今天想到的事', body: '第二张。' })
 assert.notEqual(note2.path, note.path, '同名便签不能覆盖')
 assert.match(note2.path, /-2\.md$/)
+
+// 梦的第二天可以留一张便签；同一个梦只能记一次，且只接受今天/昨晚。
+const dreamDay = dateKey(addDays(startOfDay(Date.now()), -1))
+store.addDream({ date: dreamDay, ts: Date.now(), text: '梦见一把伞。', evidence: ['raw:1'] })
+const dreamNote = hands.writeNote({ title: '记个梦', body: '伞骨上写着「算了」。', dreamDate: dreamDay })
+assert.equal(dreamNote.path, `notes/${dreamDay}-dream.md`)
+const dreamText = fs.readFileSync(path.join(dir, dreamNote.path), 'utf8')
+assert.match(dreamText, /关于 \d{4}-\d{2}-\d{2} 的梦（梦不是真事）/)
+assert.equal(hands.dreamNoteExists(dreamDay), true)
+assert.throws(() => hands.writeNote({ title: '再记一次', body: '重复。', dreamDate: dreamDay }), /已经记过/)
+assert.throws(() => hands.writeNote({ title: '记错了', body: '日期。', dreamDate: '2000-01-01' }), /只能记今天或昨晚/)
+assert.equal(toolActivity('note_write', '把 2026-11-05 的梦记成一张便签'), '把梦记了下来')
+
+// 提示只在「昨晚的梦还没记」时出现；记过之后提示消失。
+store.appendPhase({ date: dreamDay, phase: 'quiet', startedAt: Date.now(), reason: '测试' })
+const hinted = rhythmText({ store, now: Date.now(), hasDreamNote: () => false })
+assert.match(hinted, /昨晚的梦/)
+assert.match(hinted, /note_write/)
+assert.match(hinted, new RegExp(`dream_date[^\n]*${dreamDay}`))
+const quieted = rhythmText({ store, now: Date.now(), hasDreamNote: () => true })
+assert.doesNotMatch(quieted, /note_write/)
 
 // 频率限制看的是成功动作，不是函数调用次数：先补三条成功记录。
 const now = Date.now()

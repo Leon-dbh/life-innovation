@@ -115,7 +115,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 ## 她的家页面
 
-固定入口 `http://127.0.0.1:60080/home` 是只读仪表盘：今天做了什么、记得关于你的事、关系、梗概、梦（梦会标「不是真事」）。页面以只读连接读同一个 SQLite，不写库、不调模型、不替她说话；所有文本转义，90 秒自动刷新。
+固定入口 `http://127.0.0.1:60080/home` 是只读仪表盘：今天做了什么、记得关于你的事、关系、梗概、梦（梦会标「不是真事」）。当天还没有梦时，页面会显示昨天那条并标「昨晚的梦 · 日期」，不会误报「还没有梦」；页面以只读连接读同一个 SQLite，不写库、不调模型、不替她说话；所有文本转义，90 秒自动刷新。
 
 会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`。它打开的是 DSH 同源地址 `/life-innovation/home`（由插件自己注册），所以改固定入口 `-EntryPort` 不会让按钮失效。
 
@@ -180,6 +180,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 - **归档**：23:00 后进入夜里；等这一天过完、安静满足条件再收，避免漏掉 23:00–24:00 的话。写 `diary/YYYY-MM-DD.md`，落一条 `close_day` 动作（只成功一次）。
 - **梦**：从近 3 天真实原话 + 真实动作里取素材写一段，`non_factual=1`，证据是 `raw:N`/`act:N`；梦不进生活块、不进事实，日记里单列「梦（不是真事）」。
+- **把梦记下来**：第二天她可以用 `note_write` 带 `dream_date` 把昨晚的梦写成 `notes/<date>-dream.md`；一个梦只能记一张，正文标「梦不是真事」。是否记由她决定，提示只在「昨晚的梦还没记」时出现一次。
 - 状态注入在 `life:rhythm`（order 850），名字注入在 `life:name`（order 810）。
 
 ## 手：她能碰到的六件事
@@ -189,7 +190,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 | 工具 | 用途 | 边界 |
 | --- | --- | --- |
 | `room_list` / `room_read` | 看/读自己家里的日记、便签、书 | `room_list` 可列 `diary/`、`notes/`、`books/`、`backups/`；`room_read` 只读前三处；路径牢笼拒绝 `..`、盘符、符号链接逃逸 |
-| `note_write` | 写便签存进 `notes/` | 每天 3 张、每张 2000 字；同名不覆盖 |
+| `note_write` | 写便签存进 `notes/`；可带 `dream_date` 记昨晚的梦 | 每天 3 张、每张 2000 字；同名不覆盖；一个梦只能记一张 |
 | `book_next` | 从 Project Gutenberg 读一段 | 固定四本公共领域书；每天 4 段；首次下载后只读本地 |
 | `lookup` | 查 Wikipedia 摘要 | 每天 3 次；只走 Wikipedia 域名；查不到就报查不到 |
 | `notify` | 弹一条 Windows 通知 | 每天 1 次、120 字；仅交互式桌面会话 |

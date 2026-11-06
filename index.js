@@ -179,7 +179,7 @@ export function apply(ctx, config = {}) {
     interpolate: false,
     text: () => {
       try {
-        return rhythmText({ store, now: Date.now() })
+        return rhythmText({ store, now: Date.now(), hasDreamNote: (d) => Boolean(hands && hands.dreamNoteExists(d)) })
       } catch (error) {
         ctx.logger?.warn?.(`[life-innovation] 节律文本失败：${error?.message || error}`)
         return ''
@@ -204,12 +204,19 @@ export function apply(ctx, config = {}) {
         const rawArgs = call.arguments
         const argsText = typeof rawArgs === 'string' ? rawArgs : (rawArgs ? JSON.stringify(rawArgs) : '')
         const args = argsText.replace(/\s+/g, ' ').slice(0, 120)
+        let parsedArgs = null
+        if (rawArgs && typeof rawArgs === 'object') parsedArgs = rawArgs
+        else if (typeof rawArgs === 'string') {
+          try { parsedArgs = JSON.parse(rawArgs) } catch { parsedArgs = null }
+        }
+        const dreamDate = String(parsedArgs?.dream_date || '').trim()
+        const isDreamNote = String(call.name || '') === 'note_write' && /^\d{4}-\d{2}-\d{2}$/.test(dreamDate)
         store.addAction({
           ts: Number(event?.time) || Date.now(),
           sessionId: eventSessionId,
-          kind: 'tool',
+          kind: isDreamNote ? 'life' : 'tool',
           tool: String(call.name || ''),
-          summary: args,
+          summary: isDreamNote ? `把 ${dreamDate} 的梦记成一张便签` : args,
           callId: String(call.callId || ''),
           status: 'called',
         })
@@ -233,6 +240,13 @@ export function apply(ctx, config = {}) {
           // 至少别让她做过的工具永远停在 called。
           const tool = String(data.message?.name || data.tool || data.message?.source?.tool || data.message?.toolName || '')
           store.updateActionByFallback(eventSessionId, tool, status)
+        }
+        // 工具刚完成时，assistant/message 的那次 syncDay 已经跑过了；不补一次，
+        // 读者要等到「安静 20 分钟」才会在生活线里看见这次动作。
+        try {
+          syncDay({ store, now: Number(event?.time) || Date.now() })
+        } catch (error) {
+          ctx.logger?.warn?.(`[life-innovation] 同步生活线失败：${error?.message || error}`)
         }
         return
       }

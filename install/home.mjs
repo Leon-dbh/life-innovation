@@ -69,6 +69,16 @@ function dateLabel(date) {
   return `${y} 年 ${m} 月 ${d} 日 · ${weekday}`
 }
 
+function shiftDate(date, delta) {
+  const [y, m, d] = String(date).split('-').map(Number)
+  return dateKey(new Date(y, m - 1, d + delta, 12).getTime())
+}
+
+function monthDay(date) {
+  const [, m, d] = String(date).split('-').map(Number)
+  return `${m} 月 ${d} 日`
+}
+
 function evidenceList(raw) {
   try {
     const list = JSON.parse(String(raw || '[]'))
@@ -151,7 +161,10 @@ export function collectHome({ home, dbPath, now = Date.now() }) {
     const actions = rows(db, "SELECT id, ts, tool, summary FROM actions WHERE ts BETWEEN ? AND ? AND status = 'ok' ORDER BY ts DESC, id DESC LIMIT 24", [dayStart, dayEnd])
     const facts = rows(db, 'SELECT subject, predicate, value, due_at FROM assertions WHERE valid_to IS NULL ORDER BY id DESC LIMIT 16')
     const summaries = rows(db, 'SELECT ts, text FROM summaries ORDER BY id DESC LIMIT 2')
-    const dreams = rows(db, 'SELECT date, text, evidence FROM dreams WHERE date = ? ORDER BY id DESC LIMIT 1', [today])
+    // 梦是在「一天收起来之后」才生成的，页面打开时它通常属于昨天；
+    // 只查今天会显示成「还没有梦」。今天有就看今天，没有就退回昨晚。
+    const yesterday = shiftDate(today, -1)
+    const dreams = rows(db, 'SELECT date, text, evidence FROM dreams WHERE date IN (?, ?) ORDER BY date DESC, id DESC LIMIT 1', [today, yesterday])
     const relation = row(db, 'SELECT person_id, stage, first_seen, last_seen, turns FROM relations ORDER BY last_seen DESC LIMIT 1')
     const profileName = row(db, "SELECT value FROM profiles WHERE key = '名字' LIMIT 1")
     const current = row(db, 'SELECT phase, started_at, reason FROM life_phases WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1')
@@ -325,15 +338,19 @@ function summaryBlock(summaries) {
   </div>`).join('')
 }
 
-function dreamBlock(dreams) {
+function dreamBlock(dreams, today) {
   if (!dreams.length) {
     return '<p class="empty">还没有梦。梦只在一天收起来之后才会出现。</p>'
   }
-  return dreams.map((d) => `<div class="dream">
+  return dreams.map((d) => {
+    const when = d.date === today ? '今天的梦' : `昨晚的梦 · ${monthDay(d.date)}`
+    return `<div class="dream">
+    <div class="dream-when">${esc(when)}</div>
     <div class="dream-tag">梦 · 不是真事</div>
     <p>${esc(clip(d.text, 220))}</p>
     <div class="ev">${evidenceChips(d.evidence)}</div>
-  </div>`).join('')
+  </div>`
+  }).join('')
 }
 
 function relationBlock(relation, name, agentName = '') {
@@ -428,7 +445,7 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
         <section class="card">
           <div class="eyebrow">夜里</div>
           <h2>梦</h2>
-          ${dreamBlock(data.dreams)}
+          ${dreamBlock(data.dreams, data.today)}
         </section>
       </div>
 
@@ -507,6 +524,7 @@ h3 { font-size:14px; font-weight:500; color:var(--muted); margin:28px 0 12px; le
 .quote { margin-top:12px; }
 .quote p, .dream p { margin:4px 0 0; font-size:14px; color:#d9d3c8; }
 .dream { margin-top:12px; border:1px dashed rgba(83,103,156,.5); border-radius:14px; padding:12px 14px; background:rgba(83,103,156,.07); }
+.dream-when { color:#a9b8da; font-size:11px; letter-spacing:.08em; margin-bottom:4px; }
 .dream-tag { color:#8fa2cf; font-size:10px; letter-spacing:.16em; }
 footer { margin-top:26px; border-top:1px solid var(--line); padding-top:16px; display:flex; flex-direction:column; gap:6px; }
 .stats { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--muted); }
