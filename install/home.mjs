@@ -138,7 +138,7 @@ function factLine(fact) {
   return `${fact.subject || '他'} ${p}：${v}`
 }
 
-export function collectHome({ home, dbPath, now = Date.now() }) {
+export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = true }) {
   const today = dateKey(now)
   const dayStart = startOfDay(today)
   const dayEnd = nextDayStart(today) - 1
@@ -164,7 +164,9 @@ export function collectHome({ home, dbPath, now = Date.now() }) {
     // 梦是在「一天收起来之后」才生成的，页面打开时它通常属于昨天；
     // 只查今天会显示成「还没有梦」。今天有就看今天，没有就退回昨晚。
     const yesterday = shiftDate(today, -1)
-    const dreams = rows(db, 'SELECT date, text, evidence FROM dreams WHERE date IN (?, ?) ORDER BY date DESC, id DESC LIMIT 1', [today, yesterday])
+    const dreams = dreamLookback
+      ? rows(db, 'SELECT date, text, evidence FROM dreams WHERE date IN (?, ?) ORDER BY date DESC, id DESC LIMIT 1', [today, yesterday])
+      : rows(db, 'SELECT date, text, evidence FROM dreams WHERE date = ? ORDER BY id DESC LIMIT 1', [today])
     const relation = row(db, 'SELECT person_id, stage, first_seen, last_seen, turns FROM relations ORDER BY last_seen DESC LIMIT 1')
     const profileName = row(db, "SELECT value FROM profiles WHERE key = '名字' LIMIT 1")
     const current = row(db, 'SELECT phase, started_at, reason FROM life_phases WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1')
@@ -265,9 +267,9 @@ function sessionLabel(activities) {
   return list.length > 3 ? `${shown} 等 ${list.length} 件` : shown
 }
 
-function timeline(blocks) {
+function timeline(blocks, emptyText = '今天还没有留下动作。空白也是真的——她不会替自己编。') {
   if (!blocks.length) {
-    return '<p class="empty">今天还没有留下动作。空白也是真的——她不会替自己编。</p>'
+    return `<p class="empty">${esc(emptyText)}</p>`
   }
   return `<ol class="timeline">${sessions(blocks).map((b) => {
     const start = clock(b.started_at)
@@ -338,12 +340,12 @@ function summaryBlock(summaries) {
   </div>`).join('')
 }
 
-function dreamBlock(dreams, today) {
+function dreamBlock(dreams, today, past = false) {
   if (!dreams.length) {
     return '<p class="empty">还没有梦。梦只在一天收起来之后才会出现。</p>'
   }
   return dreams.map((d) => {
-    const when = d.date === today ? '今天的梦' : `昨晚的梦 · ${monthDay(d.date)}`
+    const when = past ? '那天的梦' : d.date === today ? '今天的梦' : `昨晚的梦 · ${monthDay(d.date)}`
     return `<div class="dream">
     <div class="dream-when">${esc(when)}</div>
     <div class="dream-tag">梦 · 不是真事</div>
@@ -373,8 +375,80 @@ function statsLine(stats) {
   ].map((x) => `<span>${esc(x)}</span>`).join('<i>·</i>')
 }
 
-export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agentName = '' }) {
+function clampDays(value) {
+  return Number(value) >= 7 ? 7 : 1
+}
+
+function reviewTabs(days) {
+  const link = (n, label) => `<a href="?days=${n}"${days === n ? ' class="active" aria-current="page"' : ''}>${label}</a>`
+  return `<nav class="tabs" aria-label="查看范围">${link(1, '今天')}${link(7, '最近七天')}</nav>`
+}
+
+function collectPreviousDays({ home, dbPath, now, days }) {
+  const today = dateKey(now)
+  const out = []
+  for (let i = 1; i < days; i += 1) {
+    const date = shiftDate(today, -i)
+    out.push(collectHome({
+      home,
+      dbPath,
+      now: startOfDay(date) + 12 * 3600000,
+      dreamLookback: false,
+    }))
+  }
+  return out
+}
+
+function pastDayCard(data) {
+  const dayStart = startOfDay(data.today)
+  const total = nextDayStart(data.today) - dayStart
+  const last = data.phases[data.phases.length - 1] || null
+  const meta = last ? (PHASE[last.phase] || { name: last.phase, color: '#5a6068' }) : null
+  return `<section class="today week-day">
+    <div class="day-head">
+      <div>
+        <div class="eyebrow">更早</div>
+        <h2>${esc(dateLabel(data.today))}</h2>
+      </div>
+      ${meta ? `<div class="now-phase"><i style="background:${meta.color}"></i><div><strong>${esc(meta.name)}</strong><span class="muted">这一天</span></div></div>` : ''}
+    </div>
+
+    <div class="track-wrap" aria-label="${esc(data.today)} 的节律">
+      <div class="track">${track(data.phases, dayStart, dayStart + total, total)}</div>
+      <div class="ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+      <div class="legend-row">${phaseLegend(data.phases) || '<span class="muted">这一天没有节律记录</span>'}</div>
+    </div>
+
+    <h3>她做过的事</h3>
+    ${timeline(data.blocks, '这一天没有留下动作。空白也是真的——她不会替自己编。')}
+
+    ${data.actions.length ? `<details class="actions">
+      <summary>动作明细（${data.actions.length}）</summary>
+      <ul>${data.actions.map((a) => `<li><time>${esc(clock(a.ts))}</time><code>${esc(a.tool)}</code><span>${esc(a.summary || '')}</span></li>`).join('')}</ul>
+    </details>` : ''}
+
+    ${data.dreams.length ? `<h3>梦</h3>${dreamBlock(data.dreams, data.today, true)}` : ''}
+  </section>`
+}
+
+function weekBlock(days) {
+  if (!days.length) return ''
+  const newest = days[0].today
+  const oldest = days[days.length - 1].today
+  return `<section class="week">
+    <div class="week-head">
+      <div class="eyebrow">最近七天</div>
+      <h2>再往前六天 · ${esc(monthDay(oldest))} — ${esc(monthDay(newest))}</h2>
+      <p class="empty">今天在上面；再往前六天，空着就是空着。</p>
+    </div>
+    <div class="week-list">${days.map(pastDayCard).join('')}</div>
+  </section>`
+}
+
+export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agentName = '', days = 1 }) {
+  const span = clampDays(days)
   const data = collectHome({ home, dbPath, now })
+  const pastDays = !data.missing && span > 1 ? collectPreviousDays({ home, dbPath, now, days: span }) : []
   const today = data.today
   const dayStart = startOfDay(today)
   const total = nextDayStart(today) - dayStart
@@ -388,7 +462,7 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
   const body = data.missing
     ? `<section class="card"><h2>她还没有家</h2>
        <p class="empty">数据库还没建：${esc(data.error || '找不到记忆库')}。<br>等她第一次醒来、说上话，这里就会有东西。</p></section>`
-    : `<section class="today">
+    : `${reviewTabs(span)}<section class="today">
         <div class="day-head">
           <div>
             <div class="eyebrow">今天</div>
@@ -422,6 +496,7 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
           <ul>${data.actions.map((a) => `<li><time>${esc(clock(a.ts))}</time><code>${esc(a.tool)}</code><span>${esc(a.summary || '')}</span></li>`).join('')}</ul>
         </details>` : ''}
       </section>
+      ${weekBlock(pastDays)}
 
       <div class="grid">
         <section class="card">
@@ -479,7 +554,17 @@ h1 { font-family:"Songti SC","Noto Serif SC",SimSun,serif; font-weight:500; font
 .back { color:var(--ink); text-decoration:none; border:1px solid var(--line); padding:9px 14px; border-radius:999px; font-size:13px; white-space:nowrap; }
 .back:hover { border-color:var(--accent); color:var(--accent); }
 .back span { color:var(--accent); }
+.tabs { display:flex; gap:8px; margin:0 0 18px; }
+.tabs a { color:var(--muted); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:7px 14px; font-size:12px; }
+.tabs a:hover { color:var(--ink); border-color:rgba(241,236,226,.3); }
+.tabs a.active { color:#0e1014; background:var(--accent); border-color:var(--accent); }
 .today { background:linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); border:1px solid var(--line); border-radius:22px; padding:26px 28px 24px; }
+.week { margin-top:26px; }
+.week-head { margin:0 0 14px; }
+.week-head h2 { font-size:18px; }
+.week-head .empty { margin-top:4px; }
+.week-list { display:grid; gap:16px; }
+.week-day { padding:22px 24px 20px; }
 .day-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
 h2 { font-size:19px; font-weight:500; margin:6px 0 0; letter-spacing:.01em; }
 h3 { font-size:14px; font-weight:500; color:var(--muted); margin:28px 0 12px; letter-spacing:.08em; }
@@ -537,7 +622,8 @@ footer { margin-top:26px; border-top:1px solid var(--line); padding-top:16px; di
   .timeline li { grid-template-columns:88px 1fr; }
   .timeline li .ev { grid-column:2; justify-self:start; }
   .chips { justify-content:flex-start; }
-  .today { padding:20px 16px; }
+  .today, .week-day { padding:20px 16px; }
+  .tabs { margin-bottom:14px; }
 }
 </style>
 </head>

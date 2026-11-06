@@ -53,7 +53,8 @@ const server = http.createServer((req, res) => {
     res.end('只接受 GET')
     return
   }
-  const pathname = new URL(req.url || '/', 'http://127.0.0.1').pathname
+  const requestUrl = new URL(req.url || '/', 'http://127.0.0.1')
+  const pathname = requestUrl.pathname
 
   if (pathname === '/health') {
     const url = currentUrl()
@@ -70,6 +71,7 @@ const server = http.createServer((req, res) => {
         now: Date.now(),
         chatUrl: currentUrl(),
         agentName,
+        days: requestUrl.searchParams.get('days') || 1,
       })
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',

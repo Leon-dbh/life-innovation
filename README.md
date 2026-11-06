@@ -117,9 +117,11 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 固定入口 `http://127.0.0.1:60080/home` 是只读仪表盘：今天做了什么、记得关于你的事、关系、梗概、梦（梦会标「不是真事」）。当天还没有梦时，页面会显示昨天那条并标「昨晚的梦 · 日期」，不会误报「还没有梦」；页面以只读连接读同一个 SQLite，不写库、不调模型、不替她说话；所有文本转义，90 秒自动刷新。
 
+页面顶部有「今天 / 最近七天」两个视图。`/home?days=7` 会显示今天，再往前六天；每天各自有节律、时间线、动作明细和梦，没有动作的日子会写「这一天没有留下动作」。视图只读，仍不写库、不调模型。
+
 会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`。它打开的是 DSH 同源地址 `/life-innovation/home`（由插件自己注册），所以改固定入口 `-EntryPort` 不会让按钮失效。
 
-页面只列「今天」；最近七天用 `life_days` 工具。页面默认读 `<home>/state/life-innovation.sqlite`；同一个库由安装脚本、service 和备份脚本共享 `dbPath`，不再各自猜路径。
+页面默认读 `<home>/state/life-innovation.sqlite`；同一个库由安装脚本、service 和备份脚本共享 `dbPath`，不再各自猜路径。更长的历史仍可用 `life_days` 工具查。
 
 ## 记忆
 

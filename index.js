@@ -114,9 +114,10 @@ export function apply(ctx, config = {}) {
             res.end('只支持 GET')
             return
           }
+          const requestUrl = new URL(req.url || '/life-innovation/home', 'http://127.0.0.1')
           let html
           try {
-            html = renderHome({ home, dbPath, now: Date.now(), chatUrl: '/', agentName })
+            html = renderHome({ home, dbPath, now: Date.now(), chatUrl: '/', agentName, days: requestUrl.searchParams.get('days') || 1 })
           } catch (error) {
             html = renderHomeError(error, agentName)
             res.writeHead(503, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })

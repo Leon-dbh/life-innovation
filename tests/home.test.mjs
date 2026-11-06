@@ -42,6 +42,20 @@ store.addAction({
 })
 store.addSummary(at(18, 59), 's1', '**记住** 你说：我叫林晚。；他说：好的。', at(18, 29), at(18, 59), 1)
 store.addDream({ date: day, ts: at(23, 5), text: '梦见一把伞，伞骨上写着「算了」。', evidence: ['raw:1'] })
+
+// 给七天视图准备前一天：一个真实动作 + 一个梦。
+const pastDay = '2026-11-04'
+const pastAt = at(18, 0) - 86400000
+store.appendPhase({ date: pastDay, phase: 'quiet', startedAt: pastAt - 3600000, reason: '夜里，没人在说话' })
+store.replaceLifeBlocks(pastDay, [
+  { activity: '读了一段书', startedAt: pastAt, endedAt: pastAt, evidence: ['act:9'] },
+])
+store.addAction({
+  ts: pastAt, sessionId: 's1', kind: 'life', tool: 'book_next',
+  summary: '读了《柳林风声》一段', callId: 'past-book', status: 'ok',
+})
+store.addDream({ date: pastDay, ts: pastAt + 60000, text: '梦见旧书里夹着一片叶子。', evidence: ['raw:1'] })
+
 store.touchRelation('他', at(18, 29))
 store.setProfile('他', '名字', '林晚', 'raw:1', at(18, 29))
 store.close()
@@ -66,6 +80,20 @@ assert.match(html, /梦 · 不是真事/)
 assert.match(html, /今天的梦/)
 assert.match(html, /梦见一把伞/)
 assert.match(html, /没有留下动作|空着/)
+assert.doesNotMatch(html, /<section class="week">/, '默认只显示今天')
+assert.match(html, /href="\?days=7"/)
+assert.match(html, /class="active" aria-current="page">今天<\/a>/)
+
+// 七天视图：今天不变，再补六天；过去的日子有动作和梦就展示，没有就空着。
+const week = renderHome({ home, dbPath, now, days: 7 })
+assert.match(week, /最近七天/)
+assert.match(week, /2026 年 11 月 4 日/)
+assert.match(week, /读了一段书/)
+assert.match(week, /梦见旧书/)
+assert.match(week, /那天的梦/)
+assert.match(week, /这一天没有留下动作/)
+assert.match(week, /href="\?days=1"/)
+assert.match(week, /class="active" aria-current="page">最近七天<\/a>/)
 
 // 摘要里的 markdown 与「你说/他说」不该原样出现在页面上
 assert.doesNotMatch(html, /\*\*/)
