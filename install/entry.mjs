@@ -14,7 +14,7 @@
 import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
-import { renderHome, renderHomeError, homeFilePath } from './home.mjs'
+import { renderHome, renderHomeError, homeFilePath, readHomeDbHint } from './home.mjs'
 
 const rawPort = Number(process.env.LIFE_INNOVATION_ENTRY_PORT || process.env.JINGJING_ENTRY_PORT || 60080)
 const port = Number.isInteger(rawPort) && rawPort >= 1 && rawPort <= 65535 ? rawPort : 60080
@@ -25,8 +25,16 @@ const urlFile = process.env.LIFE_INNOVATION_URL_FILE || process.env.JINGJING_URL
 // 家的位置优先看环境变量，其次从 state/web-url.txt 的上一级反推，
 // 这样即使 DataHome 不是默认目录，/home 也能找到同一套数据。
 const dataHome = homeEnv || path.dirname(path.dirname(urlFile))
-const dbFile = process.env.LIFE_INNOVATION_DB || process.env.JINGJING_DB || homeFilePath(dataHome)
 const agentName = String(process.env.LIFE_INNOVATION_AGENT_NAME || process.env.JINGJING_AGENT_NAME || '').trim()
+
+// 每次请求都重新读提示文件：插件可能比入口晚启动，也可能刚手改过 config.dbPath。
+// 文件由插件在拿到最终 dbPath 后写；没有文件时才退回安装器给的环境变量。
+function currentDbFile() {
+  return readHomeDbHint(dataHome)
+    || process.env.LIFE_INNOVATION_DB
+    || process.env.JINGJING_DB
+    || homeFilePath(dataHome)
+}
 
 function currentUrl() {
   try {
@@ -67,7 +75,7 @@ const server = http.createServer((req, res) => {
     try {
       const html = renderHome({
         home: dataHome,
-        dbPath: dbFile,
+        dbPath: currentDbFile(),
         now: Date.now(),
         chatUrl: currentUrl(),
         agentName,

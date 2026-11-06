@@ -658,6 +658,21 @@ export function homeFilePath(home) {
   return next
 }
 
+/** 插件启动时把「这次实际打开的库」写在这里，固定入口读它。
+ *  这样手改 config.dbPath、又没重跑安装脚本时，/home 也不会读旧库。 */
+export function homeDbHintFile(home) {
+  return path.join(home, 'state', 'home-db.txt')
+}
+
+export function readHomeDbHint(home) {
+  try {
+    const hinted = fs.readFileSync(homeDbHintFile(home), 'utf8').trim()
+    return hinted && fs.existsSync(hinted) ? hinted : ''
+  } catch {
+    return ''
+  }
+}
+
 export function homeDiaryDir(home) {
   return path.join(home, 'diary')
 }

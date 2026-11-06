@@ -6,6 +6,8 @@
  * - 写记忆只在本地做（node:sqlite），抽取是确定性规则，不为此调模型。
  * - 每轮注入走 ctx.systemPrompt.context（动态上下文），不写死进历史。
  */
+import fs from 'node:fs'
+import path from 'node:path'
 import { MemoryStore } from './lib/store.js'
 import { extractAssertions } from './lib/extract.js'
 import { maybeSummarize } from './lib/summaries.js'
@@ -15,7 +17,7 @@ import { reconcileOnStart, syncPhase, tickRhythm, rhythmText } from './lib/rhyth
 import { registerMemoryTools } from './lib/tools.js'
 import { createHands } from './lib/hands.js'
 import { resolvePaths } from './lib/paths.js'
-import { renderHome, renderHomeError } from './install/home.mjs'
+import { homeDbHintFile, renderHome, renderHomeError } from './install/home.mjs'
 import * as observe from './lib/observe.js'
 
 export const name = 'life-innovation'
@@ -77,6 +79,15 @@ export function apply(ctx, config = {}) {
   })
 
   ctx.effect(() => () => store.close())
+
+  // 固定入口是另一个进程，拿不到插件 config。把这次实际打开的库写成一个提示文件，
+  // entry 每次请求 /home 时读它；手改 config.dbPath 后即使没重跑安装，页面也不会读旧库。
+  try {
+    fs.mkdirSync(path.dirname(homeDbHintFile(home)), { recursive: true })
+    fs.writeFileSync(homeDbHintFile(home), dbPath, 'utf8')
+  } catch (error) {
+    ctx.logger?.warn?.(`[life-innovation] 写家页面库提示失败：${error?.message || error}`)
+  }
 
   // 启动时上一进程遗留的「called」永远等不到结果了：标成 uncertain，不能算她做成了。
   const orphans = store.markOrphanActions()

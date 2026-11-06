@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { MemoryStore } from '../lib/store.js'
-import { renderHome, renderHomeError, homeFilePath } from '../install/home.mjs'
+import { renderHome, renderHomeError, homeFilePath, homeDbHintFile, readHomeDbHint } from '../install/home.mjs'
 
 const TZ = 'Asia/Shanghai'
 const now = Date.parse('2026-11-05T23:20:00+08:00')
@@ -133,6 +133,19 @@ assert.match(lastNight, /昨晚的梦 · 11 月 4 日/)
 assert.match(lastNight, /昨晚梦见抽屉/)
 assert.match(lastNight, /原话 7/)
 fs.rmSync(tmp2, { recursive: true, force: true })
+
+// 固定入口通过插件写下的提示文件找到「这次真正打开的库」，
+// 所以手改 config.dbPath、没重跑安装脚本时也不会读旧库。
+const hintHome = fs.mkdtempSync(path.join(os.tmpdir(), 'jingjing-home-hint-'))
+const hintedDb = path.join(hintHome, 'custom.sqlite')
+fs.mkdirSync(path.dirname(hintedDb), { recursive: true })
+fs.writeFileSync(hintedDb, '')
+fs.mkdirSync(path.dirname(homeDbHintFile(hintHome)), { recursive: true })
+fs.writeFileSync(homeDbHintFile(hintHome), hintedDb, 'utf8')
+assert.equal(readHomeDbHint(hintHome), hintedDb)
+fs.writeFileSync(homeDbHintFile(hintHome), path.join(hintHome, 'missing.sqlite'), 'utf8')
+assert.equal(readHomeDbHint(hintHome), '')
+fs.rmSync(hintHome, { recursive: true, force: true })
 
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log('OK: 家（只读、证据、节律、事实去重、梦、XSS、缺库）')

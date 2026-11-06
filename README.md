@@ -121,7 +121,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`。它打开的是 DSH 同源地址 `/life-innovation/home`（由插件自己注册），所以改固定入口 `-EntryPort` 不会让按钮失效。
 
-页面默认读 `<home>/state/life-innovation.sqlite`；同一个库由安装脚本、service 和备份脚本共享 `dbPath`，不再各自猜路径。更长的历史仍可用 `life_days` 工具查。
+页面默认读 `<home>/state/life-innovation.sqlite`；同一个库由安装脚本、service 和备份脚本共享 `dbPath`，不再各自猜路径。插件启动后会把这次实际打开的库写到 `<home>/state/home-db.txt`，固定入口每次打开 `/home` 都读它；手改 `config.dbPath` 后不用重跑安装，页面也会跟着换库。更长的历史仍可用 `life_days` 工具查。
 
 ## 记忆
 
