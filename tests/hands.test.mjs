@@ -33,6 +33,14 @@ const fetchImpl = async (url) => {
   if (url.includes('wikipedia.org')) {
     return { ok: true, status: 200, url, arrayBuffer: async () => Buffer.from(JSON.stringify(WIKI)) }
   }
+  if (url.includes('example.com')) {
+    return {
+      ok: true,
+      status: 200,
+      url,
+      arrayBuffer: async () => Buffer.from('<html><head><title>示例页</title><script>bad()</script></head><body><p>这是网页的正文，足够长，可以被读出来。</p></body></html>'),
+    }
+  }
   throw new Error(`unexpected url ${url}`)
 }
 
@@ -136,6 +144,14 @@ store.addAction({ ts: now, kind: 'tool', tool: 'lookup', summary: 'x', callId: '
 store.addAction({ ts: now, kind: 'tool', tool: 'lookup', summary: 'x', callId: 'seed-lookup-3', status: 'ok' })
 await assert.rejects(() => hands.lookup({ term: '狗' }), /次数已经用完/)
 
+const wr = await hands.webRead({ url: 'https://example.com/page' })
+assert.equal(wr.title, '示例页')
+assert.match(wr.text, /这是网页的正文/)
+assert.doesNotMatch(wr.text, /bad\(\)/)
+await assert.rejects(() => hands.webRead({ url: 'http://example.com/' }), /只走 https/)
+await assert.rejects(() => hands.webRead({ url: 'https://127.0.0.1/' }), /本机和内网/)
+await assert.rejects(() => hands.webRead({ url: 'https://localhost/' }), /本机和内网/)
+
 // 通知失败要如实报错，不能假装弹出来了。
 const store2 = new MemoryStore(path.join(dir, 'hands2.sqlite'))
 const hands2 = createHands({
@@ -147,4 +163,4 @@ store2.close()
 
 store.close()
 fs.rmSync(dir, { recursive: true, force: true })
-console.log('OK: 六只手（读家里 / 写便签 / 读书 / 查资料 / 弹通知）的边界与频率')
+console.log('OK: 手（读家里 / 写便签 / 读书 / 查资料 / 读网页 / 弹通知）的边界与频率')
