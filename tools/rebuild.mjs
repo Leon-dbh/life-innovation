@@ -10,9 +10,10 @@
  *
  * 用法：node tools/rebuild.mjs [--db <memory.sqlite>] [--limit N]
  */
-import path from 'node:path'
+import fs from 'node:fs'
 import { MemoryStore } from '../lib/store.js'
 import { extractAssertions } from '../lib/extract.js'
+import { resolvePaths } from '../lib/paths.js'
 
 function parseArgs(argv) {
   const out = { db: null, limit: null, help: false }
@@ -46,7 +47,11 @@ if (args.limit !== null && args.limit !== undefined) {
   limit = n
 }
 
-const file = path.resolve(String(args.db || 'D:/life-innovation-home/state/life-innovation.sqlite'))
+const file = resolvePaths(args.db ? { dbPath: args.db } : {}).dbPath
+if (!fs.existsSync(file)) {
+  console.error(`找不到记忆库：${file}（不替你新建空库）`)
+  process.exit(2)
+}
 const store = new MemoryStore(file)
 
 // 1) 备份：VACUUM INTO 是事务性快照，WAL 里已提交的数据也会进去。

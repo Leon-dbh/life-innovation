@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 /** 改了抽取规则之后，把历史原话重新过一遍，补上漏掉的要点（幂等）。 */
-import path from 'node:path'
+import fs from 'node:fs'
 import { MemoryStore } from '../lib/store.js'
 import { extractAssertions } from '../lib/extract.js'
+import { resolvePaths } from '../lib/paths.js'
 
-const file = path.resolve(String(process.argv[2] || 'D:/life-innovation-home/state/life-innovation.sqlite'))
+const explicit = process.argv[2] ? { dbPath: process.argv[2] } : {}
+const file = resolvePaths(explicit).dbPath
+if (!fs.existsSync(file)) {
+  console.error(`找不到记忆库：${file}（不替你新建空库）`)
+  process.exit(2)
+}
 const store = new MemoryStore(file)
 
 // 直接按「subject+predicate+value 且 valid_to IS NULL」查，不再用 liveAssertions(…,100)

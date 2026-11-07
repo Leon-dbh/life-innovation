@@ -1,6 +1,6 @@
 {
   "name": "life-innovation",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": false,
   "type": "module",
   "description": "给一个常驻 DSH agent 的记忆、真实生活线与只读的家；agent 的名字由使用者决定",

@@ -2,6 +2,16 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.2.8 — 2026-11-07
+
+修 0.2.7 复审的 3 个 P2：`web_read` 的 SSRF 边界、空库顶掉旧家、安装器 append 生成坏 YAML。
+
+- **SSRF 边界**：`web_read` 现在先做 DNS 解析，再对每个地址做 CIDR 判断；补上 IPv6 ULA（`fc00::/7`）、link-local（`fe80::/10`）、IPv4-mapped、CGNAT（`100.64/10`）、multicast/reserved 等范围；`localhost.`、`foo.localhost`、`127.0.0.1.nip.io` 等形态都会拒绝。解析失败按内网处理。
+- **空库不再顶掉旧家**：`defaultHome` 改成「库里有真实记忆」才算可用；空的新库会让位给有数据的旧库。`backfill`/`rebuild` 改用 `resolvePaths`，库不存在时直接退出，不再用 `MemoryStore` 新建空库。
+- **安装器**：`append` 分支先拼首行再组数组，避免 PowerShell 逗号优先级把整个块拼成一行；旧家检测改为检查库行数；升级启动前会停掉 pid 文件里确认属于本产品的旧守护进程。
+- **`web_read` 细节**：流式限长、按 `content-type` 拒绝图片/PDF、识别 charset、返回跳转后的最终 URL/ref；UA 不再写死旧版本号。
+- 测试：补 `databaseUsable`、私网/公网 DNS 判定、IPv6/尾点绕过、空库升级路径；19 个测试文件本地与 `TZ=UTC` 全绿。
+
 ## 0.2.7 — 2026-11-07
 
 补上「打开网页读正文」，让浏览不止停在搜索摘要。

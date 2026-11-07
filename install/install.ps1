@@ -101,6 +101,17 @@ function Quote-Yaml([string]$value) {
   return "'" + $value.Replace("'", "''") + "'"
 }
 
+# 判断 SQLite 库里有没有真实记忆。只 Test-Path 会把「空库」当成已有实例，
+# 从而让旧家永远不会回退。Node 不可用时退回文件大小，但只作为最后兜底。
+function Test-DatabaseHasRows([string]$file) {
+  if (-not (Test-Path -LiteralPath $file)) { return $false }
+  $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+  if (-not $nodeCmd) { return ((Get-Item -LiteralPath $file).Length -gt 120000) }
+  $js = "const {DatabaseSync}=require('node:sqlite');try{const db=new DatabaseSync(process.argv[1],{readOnly:true});let n=0;for(const t of ['raw_turns','raw_archive','summaries','assertions','profiles','actions']){try{n+=db.prepare('SELECT COUNT(*) c FROM '+t).get().c}catch{}}db.close();process.exit(n>0?0:1)}catch{process.exit(2)}"
+  & $nodeCmd.Source -e $js $file 2>$null | Out-Null
+  return ($LASTEXITCODE -eq 0)
+}
+
 # 在 patch 文本里 upsert 唯一的 life-innovation（兼容旧 id jingjing-memory）的 config 项。
 # home 总是跟随本次 -DataHome；dbPath 也一起更新（否则插件写旧库、备份写新库）；
 # agentName 只在显式传了 -AgentName 时更新，没传就保留用户原来的名字。
@@ -132,8 +143,9 @@ function Set-MemoryOverride([string]$text, [string]$homePath, [string]$dbPath, [
 
   if ($blocks.Count -eq 0) {
     if (-not $appendIfMissing) { return $text }
+    $first = $nl + '- id: life-innovation'
     $blockLines = @(
-      $nl + '- id: life-innovation',
+      $first,
       "  name: 'life-innovation'",
       '  config:',
       ('    home: ' + (Quote-Yaml $homePath)),
@@ -230,6 +242,34 @@ function Remove-LegacyBackupTask {
   }
 }
 
+# 升级时旧守护进程还占着固定入口端口；只写新 service.ps1 不杀旧进程，
+# 新入口会 listen 失败。只杀 pid 文件里、命令行确实是本产品 service.ps1 的进程。
+function Stop-OldService {
+  $pidFile = Join-Path $DataHome 'state\service.pid'
+  if (-not (Test-Path -LiteralPath $pidFile)) { return }
+  $rawPid = $null
+  try { $rawPid = (Get-Content -LiteralPath $pidFile -Raw -ErrorAction Stop).Trim() } catch { $rawPid = $null }
+  $oldPid = 0
+  if (-not $rawPid -or -not [int]::TryParse($rawPid, [ref]$oldPid) -or $oldPid -le 0) {
+    Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+    return
+  }
+  $proc = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $oldPid) -ErrorAction SilentlyContinue
+  if (-not $proc) {
+    Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+    return
+  }
+  $cmdLine = [string]$proc.CommandLine
+  if ($cmdLine -notmatch 'service\.ps1') {
+    Warn ("忽略旧 pid {0}：命令行不像本产品的 service.ps1" -f $oldPid)
+    return
+  }
+  Warn ("停止旧守护进程（pid {0}），避免新旧实例抢端口" -f $oldPid)
+  & taskkill.exe /PID $oldPid /T /F 2>&1 | Out-Null
+  Start-Sleep -Milliseconds 800
+  Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
+}
+
 # 迁移 patch：旧插件名 -> life-innovation，并把 home/dbPath（以及显式给出的 agentName）改成本次安装值。
 function Migrate-PatchFile([string]$path) {
   $text = Read-Utf8Text $path
@@ -258,7 +298,7 @@ $LegacyDataHome = 'D:\jingjing-home'
 $LegacyProfileName = 'jingjing'
 $LegacyDefaultDb = Join-Path $LegacyDataHome 'state\jingjing.sqlite'
 $NewDefaultHome = 'D:\life-innovation-home'
-if (-not $PSBoundParameters.ContainsKey('DataHome') -and -not $ForceNewInstance -and -not (Test-Path (Join-Path $DataHome 'state\life-innovation.sqlite')) -and (Test-Path $LegacyDefaultDb)) {
+if (-not $PSBoundParameters.ContainsKey('DataHome') -and -not $ForceNewInstance -and -not (Test-DatabaseHasRows (Join-Path $DataHome 'state\life-innovation.sqlite')) -and (Test-DatabaseHasRows $LegacyDefaultDb)) {
   Warn ("发现旧家 {0}（含旧记忆库），按升级处理，继续使用旧家；要新建空实例请显式 -DataHome ... -ForceNewInstance" -f $LegacyDataHome)
   $DataHome = $LegacyDataHome
   if (-not $PSBoundParameters.ContainsKey('Profile') -and (Test-Path (Join-Path $DshHome ("profiles\{0}" -f $LegacyProfileName)))) {
@@ -272,7 +312,7 @@ $PluginFwd = $PluginPath.Replace('\', '/')
 $ProfileDir = Join-Path $DshHome (Join-Path 'profiles' $Profile)
 $DbPath = Join-Path $DataHome 'state\life-innovation.sqlite'
 $LegacyDbPath = Join-Path $DataHome 'state\jingjing.sqlite'
-if (-not (Test-Path $DbPath) -and (Test-Path $LegacyDbPath)) { $DbPath = $LegacyDbPath }
+if (-not (Test-DatabaseHasRows $DbPath) -and (Test-DatabaseHasRows $LegacyDbPath)) { $DbPath = $LegacyDbPath }
 $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 
 Step "0. 环境检查"
@@ -486,6 +526,7 @@ if ($NoService) {
     Remove-LegacyRunValue
   }
   if ($StartService -and -not $DryRun) {
+    Stop-OldService
     $svcPath = Join-Path $serviceDir 'service.ps1'
     Start-Process -FilePath 'powershell.exe' -ArgumentList ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $svcPath + '"') -WindowStyle Hidden
     Start-Sleep -Seconds 2

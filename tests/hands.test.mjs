@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { MemoryStore } from '../lib/store.js'
-import { createHands } from '../lib/hands.js'
+import { createHands, isPrivateHost } from '../lib/hands.js'
 import { addDays, dateKey, startOfDay, toolActivity } from '../lib/life.js'
 import { rhythmText } from '../lib/rhythm.js'
 
@@ -41,6 +41,20 @@ const fetchImpl = async (url) => {
       arrayBuffer: async () => Buffer.from('<html><head><title>示例页</title><script>bad()</script></head><body><p>这是网页的正文，足够长，可以被读出来。</p></body></html>'),
     }
   }
+  if (url.includes('bing.com')) {
+    return {
+      ok: true, status: 200, url,
+      arrayBuffer: async () => Buffer.from(`<rss><channel><item><title>西湖</title><link>https://example.com/xihu</link><description>杭州的湖</description></item></channel></rss>`),
+    }
+  }
+  if (url.includes('api.github.com')) {
+    return {
+      ok: true, status: 200, url,
+      arrayBuffer: async () => Buffer.from(JSON.stringify({ items: [
+        { full_name: 'someone/dsh-memory', html_url: 'https://github.com/someone/dsh-memory', description: '记忆插件', stargazers_count: 12, updated_at: '2026-11-07T00:00:00Z' },
+      ] })),
+    }
+  }
   throw new Error(`unexpected url ${url}`)
 }
 
@@ -49,10 +63,12 @@ for (const sub of ['diary', 'notes', 'books']) fs.mkdirSync(path.join(dir, sub),
 fs.writeFileSync(path.join(dir, 'diary', '2026-11-04.md'), '# 2026-11-04\n\n和他说了会儿话。\n', 'utf8')
 const store = new MemoryStore(path.join(dir, 'hands.sqlite'))
 let toast = null
+const publicDns = async () => [{ address: '93.184.216.34', family: 4 }]
 const hands = createHands({
   home: dir,
   store,
   fetchImpl,
+  dnsLookup: publicDns,
   notifier: async (text) => { toast = text; return { ok: true } },
 })
 
@@ -152,10 +168,39 @@ await assert.rejects(() => hands.webRead({ url: 'http://example.com/' }), /只�
 await assert.rejects(() => hands.webRead({ url: 'https://127.0.0.1/' }), /本机和内网/)
 await assert.rejects(() => hands.webRead({ url: 'https://localhost/' }), /本机和内网/)
 
+const ws = await hands.webSearch({ query: '西湖' })
+assert.equal(ws.results[0].title, '西湖')
+assert.equal(ws.results[0].url, 'https://example.com/xihu')
+const ps = await hands.pluginSearch({ query: '记忆' })
+assert.equal(ps.results[0].name, 'someone/dsh-memory')
+assert.equal(ps.results[0].stars, 12)
+assert.match(ps.note, /只是资料/)
+
+// SSRF：域名解析到私网、IPv6 ULA/link-local/mapped、CGNAT、尾点 localhost 都要拒绝。
+const fakeDns = (address) => async () => [{ address, family: address.includes(':') ? 6 : 4 }]
+for (const host of ['localhost.', 'foo.localhost', '127.0.0.1.nip.io']) {
+  assert.equal(await isPrivateHost(host, fakeDns('127.0.0.1')), true, `${host} 应判为内网`)
+}
+for (const host of ['[::ffff:7f00:1]', '[fc00::1]', '[fe80::1]', '100.64.0.1', '10.0.0.1', '169.254.1.1']) {
+  assert.equal(await isPrivateHost(host, async () => { throw new Error('不应解析') }), true, `${host} 应判为内网`)
+}
+assert.equal(await isPrivateHost('example.com', fakeDns('93.184.216.34')), false)
+assert.equal(await isPrivateHost('example.com', fakeDns('192.168.1.10')), true)
+const privateStore = new MemoryStore(path.join(dir, 'hands-private.sqlite'))
+const hands2ForPrivate = createHands({
+  home: dir, store: privateStore, fetchImpl,
+  dnsLookup: fakeDns('10.0.0.7'),
+})
+await assert.rejects(
+  () => hands2ForPrivate.webRead({ url: 'https://private.example/' }),
+  /本机和内网/,
+)
+privateStore.close()
+
 // 通知失败要如实报错，不能假装弹出来了。
 const store2 = new MemoryStore(path.join(dir, 'hands2.sqlite'))
 const hands2 = createHands({
-  home: dir, store: store2, fetchImpl,
+  home: dir, store: store2, fetchImpl, dnsLookup: publicDns,
   notifier: async () => ({ ok: false, error: 'no toast' }),
 })
 await assert.rejects(() => hands2.notify({ text: '失败的通知' }), /没有弹出来：no toast/)

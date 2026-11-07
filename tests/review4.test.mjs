@@ -7,7 +7,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defaultHome, resolvePaths } from '../lib/paths.js'
+import { databaseUsable, defaultHome, resolvePaths } from '../lib/paths.js'
 import { MemoryStore } from '../lib/store.js'
 import { toolActivity } from '../lib/life.js'
 import { extractAssertions } from '../lib/extract.js'
@@ -19,8 +19,19 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8')
 // P2-1：0.1.x 旧默认家不能被新默认值直接盖掉。
 assert.equal(defaultHome((p) => p.endsWith('jingjing-home/state/jingjing.sqlite')), 'D:/jingjing-home')
 assert.equal(defaultHome(() => false), 'D:/life-innovation-home')
-assert.equal(resolvePaths({}, {}).home, 'D:/life-innovation-home')
+assert.equal(resolvePaths({}, {}, { exists: () => false, usable: () => false }).home, 'D:/life-innovation-home')
 assert.equal(resolvePaths({ home: 'E:/explicit' }, {}).home, 'E:/explicit')
+// 空的新库不算「已有实例」；有真实原话的旧库才算。
+const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'life-review4-db-'))
+const emptyDb = path.join(probeDir, 'empty.sqlite')
+const fullDb = path.join(probeDir, 'full.sqlite')
+new MemoryStore(emptyDb).close()
+const fullStore = new MemoryStore(fullDb)
+fullStore.addRaw(Date.now(), 'test', 'user', '我住在杭州。')
+fullStore.close()
+assert.equal(databaseUsable(emptyDb), false)
+assert.equal(databaseUsable(fullDb), true)
+fs.rmSync(probeDir, { recursive: true, force: true })
 
 // P2-2：已有 patch 里显式 dbPath/agentName 必须一起更新，不能只改 home。
 const install = read('install/install.ps1')
@@ -49,6 +60,9 @@ assert.match(install, /Replace\('@AGENT_NAME@', \$agentPs\)/)
 assert.match(install, /Replace\('@DB_PATH@', \$dbPs\)/)
 assert.match(read('install/service.ps1'), /\$AgentName\s+= '@AGENT_NAME@'/)
 assert.match(read('install/service.ps1'), /\$DbPath\s+= '@DB_PATH@'/)
+assert.match(install, /function Test-DatabaseHasRows/)
+assert.match(install, /function Stop-OldService/)
+assert.match(install, /Stop-OldService\s*\r?\n/)
 
 // P3-2：补录要把原话时间和 dueAt 带上。
 const backfill = read('tools/backfill.mjs')

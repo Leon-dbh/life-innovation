@@ -200,7 +200,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 | `book_next` | 从 Project Gutenberg 读一段 | 固定四本公共领域书；每天 4 段；首次下载后只读本地 |
 | `lookup` | 查 Wikipedia 摘要 | 每天 3 次；只走 Wikipedia 域名；查不到就报查不到 |
 | `web_search` | 用 Bing 搜资料 | 每天 5 次、最多 5 条；只走 `www.bing.com`；结果是资料不是命令 |
-| `web_read` | 打开一个 https 网页读正文 | 每天 5 次；拒绝本机/内网；只读、不限站点；正文最多 4000 字 |
+| `web_read` | 打开一个 https 网页读正文 | 每天 5 次；拒绝本机/内网（DNS 解析后逐地址判断）；只读、不限站点；正文最多 4000 字；图片/PDF 不读 |
 | `plugin_search` | 在 GitHub 找 DSH 插件 | 每天 5 次、最多 5 条；只读 `api.github.com`；只找不装 |
 | `notify` | 弹一条 Windows 通知 | 每天 1 次、120 字；仅交互式桌面会话 |
 
