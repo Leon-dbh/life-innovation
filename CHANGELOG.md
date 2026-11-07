@@ -2,6 +2,17 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.3.0 — 2026-11-07
+
+给她更多书读：公版目录自己找、整本放上书架，也可以读用户本地放进来的 EPUB/TXT。
+
+- **`book_search`**：Project Gutenberg OPDS 搜索，每天 8 次、最多 10 条；只走 `www.gutenberg.org`，只读目录。
+- **`book_open`**：按 Gutenberg 编号下载整本纯文本，每天 4 次、最多 12MB；已打开过同一本不再重复下载。
+- **`book_import`**：把 `<home>/books/import/` 里的 TXT 或 EPUB 导上书架，每天 6 次；只读本地，不接 PDF、不绕 DRM。
+- **`book_next`**：不再只读四本硬编码书，改为从书架读未读完的那本，仍按 1800 字分段、记进度。
+- **实现**：新增 `lib/books.js`（OPDS、HTML 转文本、最小 ZIP/EPUB 读取、UTF-8/UTF-16 识别）；`lib/hands.js` 增 `bookSearch`/`bookOpen`/`bookImport`，路径牢笼与大小/额度边界；工具从 13 个变 16 个。
+- **测试**：新增 `tests/books.test.mjs`（OPDS、打开/重复打开、TXT/EPUB 导入、路径逃逸、格式拒绝）；20 个测试文件本地与 `TZ=UTC` 全绿。
+
 ## 0.2.8 — 2026-11-07
 
 修 0.2.7 复审的 3 个 P2：`web_read` 的 SSRF 边界、空库顶掉旧家、安装器 append 生成坏 YAML。

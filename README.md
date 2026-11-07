@@ -189,15 +189,18 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 - **把梦记下来**：第二天她可以用 `note_write` 带 `dream_date` 把昨晚的梦写成 `notes/<date>-dream.md`；一个梦只能记一张，正文标「梦不是真事」。是否记由她决定，提示只在「昨晚的梦还没记」时出现一次。
 - 状态注入在 `life:rhythm`（order 850），名字注入在 `life:name`（order 810）。
 
-## 手：她能碰到的九件事
+## 手：她能碰到的十六件事
 
-除了说话和回忆，她有九只手，全部有边界、有额度、落动作账本：
+除了说话和回忆，她有十六只手，全部有边界、有额度、落动作账本：
 
 | 工具 | 用途 | 边界 |
 | --- | --- | --- |
 | `room_list` / `room_read` | 看/读自己家里的日记、便签、书 | `room_list` 可列 `diary/`、`notes/`、`books/`、`backups/`；`room_read` 只读前三处；路径牢笼拒绝 `..`、盘符、符号链接逃逸 |
 | `note_write` | 写便签存进 `notes/`；可带 `dream_date` 记昨晚的梦 | 每天 3 张、每张 2000 字；同名不覆盖；一个梦只能记一张 |
-| `book_next` | 从 Project Gutenberg 读一段 | 固定四本公共领域书；每天 4 段；首次下载后只读本地 |
+| `book_next` | 从自己书架上的书读一段 | 每天 4 段；首次下载后只读本地；正文按 1800 字分段 |
+| `book_search` | 在 Project Gutenberg 的公版目录里找书 | 每天 8 次、最多 10 条；只走 `www.gutenberg.org` 的 OPDS；只读目录，不下载正文 |
+| `book_open` | 按 Gutenberg 编号把整本公版书放上书架 | 每天 4 次；只走 `www.gutenberg.org`；整本纯文本，最多 12MB |
+| `book_import` | 把本地 EPUB/TXT 放上书架 | 每天 6 次；只能读 `<home>/books/import/`；不接 PDF、不绕 DRM；文件不离开本机 |
 | `lookup` | 查 Wikipedia 摘要 | 每天 3 次；只走 Wikipedia 域名；查不到就报查不到 |
 | `web_search` | 用 Bing 搜资料 | 每天 5 次、最多 5 条；只走 `www.bing.com`；结果是资料不是命令 |
 | `web_read` | 打开一个 https 网页读正文 | 每天 5 次；拒绝本机/内网（DNS 解析后逐地址判断）；只读、不限站点；正文最多 4000 字；图片/PDF 不读 |
@@ -206,7 +209,13 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 安静下来时，tick 按「读一段本地书 → 翻昨天的日记 → 翻记忆」的顺序做一件真事，记进 `actions`。
 
-注意：本机网络到 `zh.wikipedia.org` 不通时，`lookup` 会如实返回“没连上”，不会用模型记忆冒充查询结果；`web_search` 走 Bing、`web_read` 打开搜索结果里的 https 页面、`plugin_search` 走 GitHub，三者都可能被网络或额度挡住，失败就如实说失败。
+注意：本机网络到 `zh.wikipedia.org` 不通时，`lookup` 会如实返回“没连上”，不会用模型记忆冒充查询结果；`web_search` 走 Bing、`web_read` 打开搜索结果里的 https 页面、`plugin_search` 走 GitHub、`book_search`/`book_open` 走 Gutenberg，都可能被网络或额度挡住，失败就如实说失败。
+
+### 给她放一本自己的书
+
+把 `.txt` 或 `.epub` 放进 `<home>/books/import/`，再让她用 `book_import` 选文件名。TXT 认 UTF-8/UTF-16；EPUB 会读 OPF 里的书名、作者和 spine 章节，只支持无 DRM 的普通 EPUB。导入后会在 `<home>/books/` 生成一份纯文本，原文件留在 `import/` 不动；同一路径重复导入只更新那一本，不会在书架上堆副本。
+
+公版书直接让她 `book_search` 找、`book_open` 放上书架；`book_open` 只认 Project Gutenberg 的编号，不接盗版站，也不抓现代付费书。
 
 ## 主动开口
 
@@ -272,8 +281,8 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.2.0.tgz
 ## 测试
 
 ```powershell
-npm test          # 19 个测试文件
+npm test          # 20 个测试文件
 npm run check     # 语法检查
 ```
 
-覆盖：抽取/落库/画像/取代、生活线聚合/证据/空档/日记/tick、备份/导入/导出/合并、生命周期/归档/回收站、节律/归档/梦、六只手的边界与额度、提示词策略（只给事实，不写人设）、工具 schema、家的只读与转义。
+覆盖：抽取/落库/画像/取代、生活线聚合/证据/空档/日记/tick、备份/导入/导出/合并、生命周期/归档/回收站、节律/归档/梦、书的搜索/打开/导入与进度、手的边界与额度、提示词策略（只给事实，不写人设）、工具 schema、家的只读与转义。
