@@ -24,7 +24,7 @@ const ctx = { tools: { register: (def) => { registry.set(def.name, def); return 
 const observe = { snapshot: () => ({ packs: [{ chars: 520, cache: 'build', sections: [] }], recalls: [] }) }
 const hands = createHands({ home: dir, store, notifier: async () => ({ ok: true }) })
 const dispose = registerMemoryTools({ ctx, store, observe, hands })
-assert.deepEqual([...registry.keys()].sort(), ['book_next', 'life_days', 'life_status', 'lookup', 'memory_find', 'memory_read', 'note_write', 'notify', 'room_list', 'room_read'])
+assert.deepEqual([...registry.keys()].sort(), ['book_next', 'life_days', 'life_status', 'lookup', 'memory_find', 'memory_read', 'note_write', 'notify', 'plugin_search', 'room_list', 'room_read', 'web_search'])
 
 const room = registry.get('room_list')
 const roomOut = await room.execute({ dir: 'diary' })
