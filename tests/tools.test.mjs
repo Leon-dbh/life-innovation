@@ -26,7 +26,7 @@ const ctx = { tools: { register: (def) => { registry.set(def.name, def); return 
 const observe = { snapshot: () => ({ packs: [{ chars: 520, cache: 'build', sections: [] }], recalls: [] }) }
 const hands = createHands({ home: dir, store, notifier: async () => ({ ok: true }) })
 const dispose = registerMemoryTools({ ctx, store, observe, hands })
-assert.deepEqual([...registry.keys()].sort(), ['book_import', 'book_next', 'book_open', 'book_search', 'life_days', 'life_status', 'lookup', 'memory_explain', 'memory_find', 'memory_read', 'note_write', 'notify', 'plugin_search', 'room_list', 'room_read', 'web_read', 'web_search'])
+assert.deepEqual([...registry.keys()].sort(), ['book_import', 'book_next', 'book_open', 'book_search', 'life_days', 'life_status', 'lookup', 'memory_explain', 'memory_find', 'memory_read', 'memory_timeline', 'note_write', 'notify', 'plugin_search', 'room_list', 'room_read', 'web_read', 'web_search'])
 
 const room = registry.get('room_list')
 const roomOut = await room.execute({ dir: 'diary' })
@@ -65,6 +65,15 @@ assert.equal(archivedFact.hits[0].injected, false, '事实档案不冒充“已�
 assert.match(archivedFact.hits[0].injection, /事实档案/)
 const emptyExplain = await explain.execute({})
 assert.match(emptyExplain.note, /query 或 ref/)
+
+const timeline = registry.get('memory_timeline')
+const day = await timeline.execute({})
+assert.match(day.date, /^\d{4}-\d{2}-\d{2}$/)
+assert.ok(Array.isArray(day.chapters))
+assert.ok(Array.isArray(day.phases))
+assert.ok(Array.isArray(day.events))
+assert.ok(day.events.some((e) => /^raw:/.test(e.ref)), '时间线包含原话事件')
+assert.equal(typeof day.counts.talk, 'number')
 
 const read = registry.get('memory_read')
 const big = out.hits.find((h) => h.text.endsWith('…')) || out.hits[0]

@@ -1,6 +1,6 @@
 {
   "name": "life-innovation",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": false,
   "type": "module",
   "description": "给一个住在 DSH 里的赛博生命体：记忆、真实生活线与只读的家；名字由使用者决定",
@@ -33,9 +33,10 @@
     }
   },
   "scripts": {
-    "test": "node tests/memory.test.mjs && node tests/self.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/packcache.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/portability.test.mjs && node tests/merge.test.mjs && node tests/lifecycle.test.mjs && node tests/summaries.test.mjs && node tests/jsonschema.test.mjs && node tests/prompt_policy.test.mjs && node tests/review-fixes.test.mjs && node tests/rhythm.test.mjs && node tests/hands.test.mjs && node tests/books.test.mjs && node tests/review2.test.mjs && node tests/home.test.mjs && node tests/review3.test.mjs && node tests/review4.test.mjs",
+    "test": "node tests/memory.test.mjs && node tests/self.test.mjs && node tests/timeline.test.mjs && node tests/consolidate.test.mjs && node tests/life_eval.test.mjs && node tests/life.test.mjs && node tests/paths.test.mjs && node tests/packcache.test.mjs && node tests/tools.test.mjs && node tests/outbox.test.mjs && node tests/portability.test.mjs && node tests/merge.test.mjs && node tests/lifecycle.test.mjs && node tests/summaries.test.mjs && node tests/jsonschema.test.mjs && node tests/prompt_policy.test.mjs && node tests/review-fixes.test.mjs && node tests/rhythm.test.mjs && node tests/hands.test.mjs && node tests/books.test.mjs && node tests/review2.test.mjs && node tests/home.test.mjs && node tests/review3.test.mjs && node tests/review4.test.mjs",
     "pack": "npm pack",
-    "check": "node --check index.js && node --check lib/store.js && node --check lib/self.js && node --check lib/life.js && node --check lib/summaries.js && node --check lib/merge.js && node --check lib/tools.js && node --check lib/rhythm.js && node --check lib/view.js && node --check lib/hands.js && node --check lib/books.js && node --check lib/backup.js && node --check lib/notify.js && node --check install/home.mjs && node --check client.js && node --check install/entry.mjs"
+    "eval:life": "node tools/life_eval.mjs --md",
+    "check": "node --check index.js && node --check lib/store.js && node --check lib/self.js && node --check lib/timeline.js && node --check lib/consolidate.js && node --check lib/life.js && node --check lib/summaries.js && node --check lib/merge.js && node --check lib/tools.js && node --check lib/rhythm.js && node --check lib/view.js && node --check tools/life_eval.mjs && node --check lib/hands.js && node --check lib/books.js && node --check lib/backup.js && node --check lib/notify.js && node --check install/home.mjs && node --check client.js && node --check install/entry.mjs"
   },
   "license": "MIT",
   "engines": {

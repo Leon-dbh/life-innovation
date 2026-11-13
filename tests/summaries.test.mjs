@@ -24,6 +24,10 @@ assert.ok(first, '满 12 条新原话应生成梗概')
 assert.equal(first.rows, 4, '最近 8 条留给记忆包，一次只压 12-8=4 条')
 assert.match(first.text, /第0句/)
 assert.ok(!first.text.includes('第11句'), '最近的话不进梗概')
+assert.deepEqual(first.sourceRefs, ['raw:1', 'raw:2', 'raw:3', 'raw:4'], '梗概保留可回读的原话 ref')
+const stored = store.recentSummaries(1)[0]
+assert.deepEqual(stored.sourceRefs, first.sourceRefs)
+assert.equal(store.summaryById(stored.id).text, first.text)
 
 // 水位推进后，没有新原话就不该重复压同一批。
 assert.equal(maybeSummarize({ store, sessionId: 's1', ts: base + 300 }), null)

@@ -2,6 +2,18 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.4.0 — 2026-11-14
+
+给她一条能回看的生活时间线：一天里说过、做过、梦到、读到的都能连起来；收起来的日子会留下自己的巩固记录。
+
+- **`lib/timeline.js` / `memory_timeline`**：新增第 18 个工具，合并 `raw_turns`、`actions`、`life_blocks`、`life_phases`、`dreams`、`books`，按时间返回章节、状态、事件、计数；每条带 ref，默认今天。
+- **睡眠巩固**：新增 `self_snapshots`；`consolidateClosedDays` 只巩固已经 `close_day` 的日子，文本和证据只来自当天真实记录；重复 tick 不覆盖；`rhythm.tickRhythm` 返回 `snapshots`。
+- **分层回忆**：`summaries.source_refs` 保留可回读的原话 ref；`memory_explain` 支持 `sum:<id>` 和 `self:<id>`；`pack` 的「更早的印象」带摘要 ref。
+- **检索**：SQLite FTS5 trigram 作为长词候选补充，双字中文仍用 bigram + IDF；FTS5 不可用时自动退回 `instr`/LIKE。
+- **家的页面**：`/home` 增加睡眠巩固只读卡；旧库没有 `self_snapshots` 时自动跳过，不 503。
+- **生活体评测**：新增 `tools/life_eval.mjs` 与 `tests/fixtures/life-eval.json`，输出 continuity@7d、睡眠巩固覆盖、生活证据覆盖、修复率、自我一致、助手腔、recall@3、token、p95；`npm run eval:life`。
+- **测试**：新增 `tests/timeline.test.mjs`、`tests/consolidate.test.mjs`、`tests/life_eval.test.mjs`；24 个测试文件。
+
 ## 0.3.1 — 2026-11-13
 
 给「她自己」补上连续性：记忆包先说她的日子，再解释记忆从哪来，家里也能看见她记得什么。

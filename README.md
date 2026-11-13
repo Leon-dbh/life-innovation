@@ -123,7 +123,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 页面顶部有「今天 / 最近七天」两个视图。`/home?days=7` 会显示今天，再往前六天；每天各自有节律、时间线、动作明细和梦，没有动作的日子会写「这一天没有留下动作」。视图只读，仍不写库、不调模型。
 
-页面里还有一块只读的「她的记忆」：第一段是她自己的日子（此刻在做什么、最近做成的事、今天说过几句话、梦、正在读的书），下面是她改过口的事（现在 / 以前 / 证据 ref），再下面是按原话搜索的结果。搜索框只读查询，支持 `raw:<id>` 这样的 ref；不会写库，也不会让模型替她解释。地址可以带 `?memory=关键词`，例如 `/home?memory=杭州`。
+页面里还有一块只读的「她的记忆」：第一段是她自己的日子（此刻在做什么、最近做成的事、今天说过几句话、梦、正在读的书），下面是她改过口的事（现在 / 以前 / 证据 ref），再下面是按原话搜索的结果。搜索框只读查询，支持 `raw:<id>` 这样的 ref；不会写库，也不会让模型替她解释。地址可以带 `?memory=关键词`，例如 `/home?memory=杭州`。如果她最近已经收起来过一天，页面还会显示那天睡眠巩固留下的一小段「收起来的时候」。
 
 会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`。它打开的是 DSH 同源地址 `/life-innovation/home`（由插件自己注册），所以改固定入口 `-EntryPort` 不会让按钮失效。
 
@@ -134,7 +134,10 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 - 库：`<home>/state/life-innovation.sqlite`（可在 `config.dbPath` 改）。
 - 五层：`raw_turns` 原话 → `summaries` 梗概 → `assertions` 要点 → `profiles` 画像 + `relations` 关系。
 - 注入：每轮组装系统提示词时，`ctx.systemPrompt.context` 现算一段「你记得的事」，默认 ≤1200 字；最前面先写「你正在过的日子」，只说她自己真实发生的事，每条带 `life:`/`act:`/`day:`/`dream:`/`book:` ref。
-- 解释：`memory_explain` 能回答「这条记忆从哪来、为什么被想起、有没有进记忆包」，并把同一个说法的新旧版本一起列出；`/home` 的「她的记忆」提供同样的只读视图。
+- 解释：`memory_explain` 能回答「这条记忆从哪来、为什么被想起、有没有进记忆包」，并把同一个说法的新旧版本一起列出；梗概和睡眠巩固也能用 `sum:<id>` / `self:<id>` 回读。`/home` 的「她的记忆」提供同样的只读视图。
+- 时间线：`memory_timeline` 把某一天的原话、动作、梦、书、日子章节和节律状态缝成一条只读时间线，每条带 ref。
+- 睡眠巩固：已经 `close_day` 收起来的日子，每天生成一条 `self_snapshots`；只从真实记录里取，不调模型、不编造；重复 tick 不会重复写。
+- 分层回忆：`summaries` 保留 `source_refs`（可回读的原话），检索以 bigram + IDF 为主，SQLite FTS5 trigram 为长词补充；双字中文仍走原来的 bigram/LIKE。
 - 抽取：确定性规则（名字/城市/工作/年龄/生日/养了什么/好恶/计划），不为此调模型；同一件事有了新说法，旧说法会被 `superseded_by` 取代。
 - 不做的事：不按会话隔离（换窗口她仍是她）、不导入旧项目的库、不写「你是一个」。
 
@@ -193,9 +196,9 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 - **把梦记下来**：第二天她可以用 `note_write` 带 `dream_date` 把昨晚的梦写成 `notes/<date>-dream.md`；一个梦只能记一张，正文标「梦不是真事」。是否记由她决定，提示只在「昨晚的梦还没记」时出现一次。
 - 状态注入在 `life:rhythm`（order 850），名字注入在 `life:name`（order 810）。
 
-## 她能做到的十七件事
+## 她能做到的十八件事
 
-除了说话，她有十七个工具：五个记忆/生活回读工具，十二只有边界的手；全部有额度、落动作账本：
+除了说话，她有十八个工具：六个记忆/生活回读工具，十二只有边界的手；全部有额度、落动作账本：
 
 | 工具 | 用途 | 边界 |
 | --- | --- | --- |
@@ -285,7 +288,7 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.2.0.tgz
 ## 测试
 
 ```powershell
-npm test          # 21 个测试文件
+npm test          # 24 个测试文件
 npm run check     # 语法检查
 ```
 

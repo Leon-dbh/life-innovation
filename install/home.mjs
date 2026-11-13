@@ -231,6 +231,10 @@ export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = tr
     const current = row(db, 'SELECT phase, started_at, reason FROM life_phases WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1')
     const last = current || row(db, 'SELECT phase, started_at, reason FROM life_phases ORDER BY id DESC LIMIT 1')
     const rawToday = row(db, 'SELECT COUNT(*) AS c FROM raw_turns WHERE ts BETWEEN ? AND ?', [dayStart, dayEnd])
+    const hasSnapshots = Boolean(row(db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'self_snapshots'"))
+    const snapshot = hasSnapshots
+      ? row(db, 'SELECT id, date, text FROM self_snapshots WHERE date < ? ORDER BY date DESC LIMIT 1', [today])
+      : null
     const book = row(db, 'SELECT id, title, offset, total FROM books WHERE offset < total ORDER BY updated_at DESC LIMIT 1')
     const self = {
       lines: selfNarrative({
@@ -266,6 +270,7 @@ export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = tr
       memoryQuery: String(memoryQuery || '').trim(),
       memoryHits: memoryHits(db, memoryQuery),
       conflicts: conflictRows(db),
+      snapshot: snapshot || null,
       stats: {
         raw: count(db, 'raw_turns'),
         archived: count(db, 'raw_archive'),
@@ -400,6 +405,20 @@ function factsBlock(facts, now) {
     const source = f.source ? ` <span class="ref">${esc(f.source)}</span>` : ''
     return `<li>${esc(factLine(f))}${due}${source}</li>`
   }).join('')}</ul>`
+}
+
+function snapshotBlock(snapshot) {
+  if (!snapshot) return ''
+  const lines = String(snapshot.text || '').split('\n').filter(Boolean)
+  const body = lines.length
+    ? `<ul class="memory-lines">${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>`
+    : '<p class="empty">这一天收起来时，她没有留下可读的巩固记录。</p>'
+  return `<section class="card snapshot">
+    <div class="eyebrow">睡眠巩固 · 只读</div>
+    <h2>${esc(snapshot.date)} 收起来的时候</h2>
+    ${body}
+    <p class="muted small">这一段来自那天真实的原话、动作、梦和书；不是模型编的旁白，也不改写已经收起来的日子。</p>
+  </section>`
 }
 
 function memorySection(data, span) {
@@ -634,6 +653,7 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
       </div>
 
       ${memorySection(data, span)}
+      ${snapshotBlock(data.snapshot)}
 
       <div class="grid">
         <section class="card">
