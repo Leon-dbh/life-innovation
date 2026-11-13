@@ -89,7 +89,7 @@ export function evaluateLife({ store, now = Date.now(), queries = [], windowDays
     const expect = String(q.expect || q.expected || '').trim()
     if (!query) return { query, expect, hit: false, refs: [] }
     const out = rankedRecall({ store, query, limit: 3, now })
-    const refs = out.hits.map((h) => h.ref)
+    const refs = out.hits.map((h) => h.ref || `raw:${h.id}`)
     return {
       query, expect,
       hit: Boolean(expect) && out.hits.some((h) => String(h.text || '').includes(expect)),
