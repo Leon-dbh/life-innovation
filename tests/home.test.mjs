@@ -28,6 +28,8 @@ store.addAssertion({ ts: at(18, 29), subject: '他', predicate: '住在', value:
 store.addAssertion({ ts: at(18, 30), subject: '他', predicate: '养了', value: '猫', source: 'raw:1' })
 store.addAssertion({ ts: at(18, 30), subject: '他', predicate: '宠物', value: '猫叫团子', source: 'raw:1' })
 store.addAssertion({ ts: at(18, 31), subject: '他', predicate: '喜欢', value: '不喜欢香菜', source: 'raw:1' })
+store.addAssertion({ ts: at(18, 31), subject: '他', predicate: '工作', value: '老师', source: 'raw:1' })
+store.addAssertion({ ts: at(18, 32), subject: '他', predicate: '工作', value: '程序员', source: 'raw:1' })
 store.addAssertion({ ts: at(18, 32), subject: '他', predicate: '计划:明天', value: '去医院复查', source: 'raw:1', dueAt: at(10) + 86400000 })
 
 store.replaceLifeBlocks(day, [
@@ -103,6 +105,18 @@ assert.doesNotMatch(html, /你说：/)
 assert.match(html, /&lt;script&gt;alert\(2\)&lt;\/script&gt;/)
 assert.doesNotMatch(html, /<script>alert\(2\)/)
 assert.match(html, /class="seg"/)
+
+// 她的记忆：自我叙事、改过口的事实、按原话搜索都只读展示。
+assert.match(html, /她的记忆 · 只读/)
+assert.match(html, /你梦见过的（不是真事）/)
+assert.match(html, /她改过口的事/)
+assert.match(html, /以前说过/)
+const searched = renderHome({ home, dbPath, now, memoryQuery: '林晚' })
+assert.match(searched, /搜「林晚」找到的原话/)
+assert.match(searched, /我叫林晚/)
+assert.match(searched, /raw:1/)
+const xssSearch = renderHome({ home, dbPath, now, memoryQuery: '<script>alert(9)</script>' })
+assert.doesNotMatch(xssSearch, /<script>alert\(9\)/)
 
 // 只读：连续渲染不改变库文件大小与 mtime
 const before = fs.statSync(dbPath)

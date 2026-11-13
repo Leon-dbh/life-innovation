@@ -18,13 +18,15 @@ for (let i = 1; i <= 10; i += 1) {
 // 旧但高相关：一年前说过一次「失去味觉」，最近十句都在闲聊西湖。
 store.addRaw(now - 365 * 86400000, 's0', 'user', '去年生病的时候失去了味觉，吃什么都没味道')
 store.addAction({ ts: now, sessionId: 's1', kind: 'file', tool: 'write_diary', summary: '把今天记成日记', callId: 'diary:x', status: 'ok' })
+store.addAssertion({ ts: now - 86400000, subject: '他', predicate: '工作', value: '老师', source: 'raw:1' })
+store.addAssertion({ ts: now, subject: '他', predicate: '工作', value: '程序员', source: 'raw:2' })
 
 const registry = new Map()
 const ctx = { tools: { register: (def) => { registry.set(def.name, def); return () => registry.delete(def.name) } } }
 const observe = { snapshot: () => ({ packs: [{ chars: 520, cache: 'build', sections: [] }], recalls: [] }) }
 const hands = createHands({ home: dir, store, notifier: async () => ({ ok: true }) })
 const dispose = registerMemoryTools({ ctx, store, observe, hands })
-assert.deepEqual([...registry.keys()].sort(), ['book_import', 'book_next', 'book_open', 'book_search', 'life_days', 'life_status', 'lookup', 'memory_find', 'memory_read', 'note_write', 'notify', 'plugin_search', 'room_list', 'room_read', 'web_read', 'web_search'])
+assert.deepEqual([...registry.keys()].sort(), ['book_import', 'book_next', 'book_open', 'book_search', 'life_days', 'life_status', 'lookup', 'memory_explain', 'memory_find', 'memory_read', 'note_write', 'notify', 'plugin_search', 'room_list', 'room_read', 'web_read', 'web_search'])
 
 const room = registry.get('room_list')
 const roomOut = await room.execute({ dir: 'diary' })
@@ -45,6 +47,24 @@ assert.ok(out.hits.every((h) => typeof h.score === 'number' && h.why.length > 0)
 const rare = await find.execute({ query: '味觉', limit: 3 })
 assert.match(rare.hits[0].text, /味觉/, '稀有词命中应排第一')
 assert.ok(rare.hits[0].score > 0)
+
+const explain = registry.get('memory_explain')
+const explained = await explain.execute({ query: '西湖' })
+assert.ok(explained.hits.length > 0, 'memory_explain 能按 query 找到原话')
+assert.ok(explained.hits.every((h) => h.kind === 'raw' && h.source === '原话'))
+assert.ok(explained.hits.every((h) => typeof h.injection === 'string'))
+const byRef = await explain.execute({ ref: explained.hits[0].ref })
+assert.equal(byRef.hits[0].ref, explained.hits[0].ref)
+assert.equal(byRef.hits[0].injected, explained.hits[0].injected)
+const conflict = await explain.execute({ query: '工作' })
+assert.equal(conflict.conflicts.length, 1)
+assert.equal(conflict.conflicts[0].current, '程序员')
+assert.equal(conflict.conflicts[0].previous[0].value, '老师')
+const archivedFact = await explain.execute({ ref: conflict.conflicts[0].current_ref })
+assert.equal(archivedFact.hits[0].injected, false, '事实档案不冒充“已进记忆包”')
+assert.match(archivedFact.hits[0].injection, /事实档案/)
+const emptyExplain = await explain.execute({})
+assert.match(emptyExplain.note, /query 或 ref/)
 
 const read = registry.get('memory_read')
 const big = out.hits.find((h) => h.text.endsWith('…')) || out.hits[0]

@@ -138,7 +138,66 @@ function factLine(fact) {
   return `${fact.subject || '他'} ${p}：${v}`
 }
 
-export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = true }) {
+function memoryHits(db, query, limit = 12) {
+  const q = String(query || '').trim()
+  if (!q) return []
+  const like = `%${q}%`
+  return rows(db, `SELECT id, ts, role, text, 0 AS archived FROM raw_turns WHERE text LIKE ?
+    UNION ALL
+    SELECT id, ts, role, text, 1 AS archived FROM raw_archive WHERE text LIKE ?
+    ORDER BY ts DESC LIMIT ?`, [like, like, Math.trunc(limit)])
+}
+
+function conflictRows(db) {
+  const all = rows(db, 'SELECT id, predicate, value, valid_from, valid_to FROM assertions ORDER BY predicate, id')
+  const groups = new Map()
+  for (const r of all) {
+    if (!groups.has(r.predicate)) groups.set(r.predicate, [])
+    groups.get(r.predicate).push(r)
+  }
+  const out = []
+  for (const [predicate, list] of groups) {
+    const values = [...new Set(list.map((r) => String(r.value)))]
+    if (values.length < 2) continue
+    const live = list.filter((r) => r.valid_to === null)
+    const current = live[live.length - 1] || list[list.length - 1]
+    out.push({
+      predicate,
+      current: current.value,
+      current_ref: `assert:${current.id}`,
+      previous: list
+        .filter((r) => r.id !== current.id && String(r.value) !== String(current.value))
+        .map((r) => ({ value: r.value, ref: `assert:${r.id}`, when: fmtWhen(r.valid_from) })),
+    })
+    if (out.length >= 4) break
+  }
+  return out
+}
+
+function fmtWhen(ts) {
+  const d = new Date(Number(ts) || 0)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${clock(ts)}`
+}
+
+function selfNarrative({ date, blocks, actions, dream, book, talkCount, now }) {
+  const lines = []
+  const real = (blocks || []).filter((b) => b && b.activity !== '空档')
+  const active = real
+    .filter((b) => !b.endedAt || Number(b.endedAt) >= now - 90 * 60 * 1000)
+    .at(-1)
+  if (active) lines.push(`- 此刻：${clip(active.activity, 48)}（life:${active.id}）`)
+  const last = [...(actions || [])].sort((a, b) => Number(a.ts) - Number(b.ts)).at(-1)
+  if (last) lines.push(`- 最近你做了：${clip(last.summary || last.tool || '一件事', 48)}（act:${last.id}）`)
+  if (talkCount > 0) lines.push(`- 今天和他说过 ${talkCount} 段话（day:${date}）`)
+  if (dream) lines.push(`- 你梦见过的（不是真事）：${clip(dream.text, 52)}（dream:${dream.id}）`)
+  if (book && book.total > 0) {
+    const p = Math.max(0, Math.min(100, Math.floor((book.offset / book.total) * 100)))
+    lines.push(`- 你最近在读《${clip(book.title, 30)}》${p > 0 ? `，读到 ${p}%` : ''}（book:${book.id}）`)
+  }
+  return lines
+}
+
+export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = true, memoryQuery = '' }) {
   const today = dateKey(now)
   const dayStart = startOfDay(today)
   const dayEnd = nextDayStart(today) - 1
@@ -159,7 +218,7 @@ export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = tr
     const phases = rows(db, 'SELECT phase, started_at, ended_at, reason FROM life_phases WHERE date = ? ORDER BY started_at', [today])
     const blocks = rows(db, 'SELECT id, activity, started_at, ended_at, evidence FROM life_blocks WHERE date = ? ORDER BY started_at, id', [today])
     const actions = rows(db, "SELECT id, ts, tool, summary FROM actions WHERE ts BETWEEN ? AND ? AND status = 'ok' ORDER BY ts DESC, id DESC LIMIT 24", [dayStart, dayEnd])
-    const facts = rows(db, 'SELECT subject, predicate, value, due_at FROM assertions WHERE valid_to IS NULL ORDER BY id DESC LIMIT 16')
+    const facts = rows(db, 'SELECT id, subject, predicate, value, due_at, source FROM assertions WHERE valid_to IS NULL ORDER BY id DESC LIMIT 16')
     const summaries = rows(db, 'SELECT ts, text FROM summaries ORDER BY id DESC LIMIT 2')
     // 梦是在「一天收起来之后」才生成的，页面打开时它通常属于昨天；
     // 只查今天会显示成「还没有梦」。今天有就看今天，没有就退回昨晚。
@@ -171,6 +230,22 @@ export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = tr
     const profileName = row(db, "SELECT value FROM profiles WHERE key = '名字' LIMIT 1")
     const current = row(db, 'SELECT phase, started_at, reason FROM life_phases WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1')
     const last = current || row(db, 'SELECT phase, started_at, reason FROM life_phases ORDER BY id DESC LIMIT 1')
+    const rawToday = row(db, 'SELECT COUNT(*) AS c FROM raw_turns WHERE ts BETWEEN ? AND ?', [dayStart, dayEnd])
+    const book = row(db, 'SELECT id, title, offset, total FROM books WHERE offset < total ORDER BY updated_at DESC LIMIT 1')
+    const self = {
+      lines: selfNarrative({
+        date: today,
+        blocks: blocks.map((b) => ({
+          id: Number(b.id), activity: b.activity,
+          startedAt: Number(b.started_at), endedAt: Number(b.ended_at),
+        })),
+        actions: actions.map((a) => ({ ...a, status: 'ok' })),
+        dream: dreams[0] || null,
+        book: book || null,
+        talkCount: Number(rawToday?.c) || 0,
+        now,
+      }),
+    }
 
     return {
       missing: false,
@@ -186,6 +261,11 @@ export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = tr
       relation,
       name: profileName ? profileName.value : '',
       current: last || null,
+      self,
+      book: book || null,
+      memoryQuery: String(memoryQuery || '').trim(),
+      memoryHits: memoryHits(db, memoryQuery),
+      conflicts: conflictRows(db),
       stats: {
         raw: count(db, 'raw_turns'),
         archived: count(db, 'raw_archive'),
@@ -317,8 +397,48 @@ function factsBlock(facts, now) {
   if (!facts.length) return '<p class="empty">她还没有记住关于你的事。</p>'
   return `<ul class="facts">${factList(facts).map((f) => {
     const due = f.due_at ? ` <span class="muted">（${esc(dueText(f.due_at, now))}）</span>` : ''
-    return `<li>${esc(factLine(f))}${due}</li>`
+    const source = f.source ? ` <span class="ref">${esc(f.source)}</span>` : ''
+    return `<li>${esc(factLine(f))}${due}${source}</li>`
   }).join('')}</ul>`
+}
+
+function memorySection(data, span) {
+  if (!data || data.missing) return ''
+  const selfLines = data.self?.lines || []
+  const query = data.memoryQuery || ''
+  const self = selfLines.length
+    ? `<ul class="memory-lines">${selfLines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>`
+    : '<p class="empty">今天还没有留下她自己的日子。空白也是真的。</p>'
+  const conflicts = data.conflicts.length
+    ? `<div class="memory-conflicts"><h3>她改过口的事（旧说法没有删）</h3><ul>${data.conflicts.map((c) => {
+      const old = c.previous.map((p) => `「${esc(p.value)}」 ${esc(p.when)}（${esc(p.ref)}）`).join('；')
+      return `<li><strong>${esc(c.predicate)}</strong>：现在是「${esc(c.current)}」（${esc(c.current_ref)}）${old ? `；以前说过 ${old}` : ''}</li>`
+    }).join('')}</ul></div>`
+    : ''
+  let hits = ''
+  if (query) {
+    hits = data.memoryHits.length
+      ? `<div class="memory-hits"><h3>搜「${esc(query)}」找到的原话</h3><ul>${data.memoryHits.map((h) => {
+        const who = h.role === 'user' ? '他' : '她'
+        const tag = h.archived ? '已归档' : `raw:${h.id}`
+        return `<li><span class="muted">${esc(fmtWhen(h.ts))} ${who}说</span> ${esc(clip(h.text, 220))} <span class="ref">${esc(tag)}</span></li>`
+      }).join('')}</ul></div>`
+      : `<p class="empty">没有搜到「${esc(query)}」的原话。</p>`
+  }
+  return `<section class="card memory" id="memory">
+    <div class="eyebrow">她的记忆 · 只读</div>
+    <h2>她记得的，和为什么</h2>
+    <form class="memory-search" method="get">
+      <input type="hidden" name="days" value="${esc(span)}">
+      <input type="search" name="memory" value="${esc(query)}" placeholder="搜一句原话，例如：西湖" aria-label="搜她的记忆">
+      <button type="submit">查</button>
+    </form>
+    <h3>她正在过的日子</h3>
+    ${self}
+    ${conflicts}
+    ${hits}
+    <p class="muted small">每条都带 ref：raw/act 是原话和动作，assert 是事实档案。旧说法保留在取代链里；这一页只读。</p>
+  </section>`
 }
 
 function summaryText(text) {
@@ -447,9 +567,9 @@ function weekBlock(days) {
   </section>`
 }
 
-export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agentName = '', days = 1 }) {
+export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agentName = '', days = 1, memoryQuery = '' }) {
   const span = clampDays(days)
-  const data = collectHome({ home, dbPath, now })
+  const data = collectHome({ home, dbPath, now, memoryQuery })
   const pastDays = !data.missing && span > 1 ? collectPreviousDays({ home, dbPath, now, days: span }) : []
   const today = data.today
   const dayStart = startOfDay(today)
@@ -512,6 +632,8 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
           ${relationBlock(data.relation, data.name, agentName)}
         </section>
       </div>
+
+      ${memorySection(data, span)}
 
       <div class="grid">
         <section class="card">
@@ -605,6 +727,17 @@ h3 { font-size:14px; font-weight:500; color:var(--muted); margin:28px 0 12px; le
 .facts { list-style:none; margin:12px 0 0; padding:0; }
 .facts li { padding:6px 0; border-bottom:1px dashed rgba(255,255,255,.06); font-size:14px; }
 .facts li:last-child { border-bottom:0; }
+.ref { color:#8f8a80; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:10px; margin-left:6px; }
+.memory { margin-top:18px; }
+.memory h3 { margin-top:22px; }
+.memory-search { display:flex; gap:8px; margin:16px 0 4px; }
+.memory-search input { flex:1; min-width:0; background:rgba(255,255,255,.04); color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:9px 14px; font:13px inherit; outline:none; }
+.memory-search input:focus { border-color:var(--accent); }
+.memory-search button { background:var(--accent); color:#0e1014; border:0; border-radius:999px; padding:9px 18px; font:13px inherit; cursor:pointer; }
+.memory-lines, .memory-hits ul, .memory-conflicts ul { list-style:none; margin:8px 0 0; padding:0; }
+.memory-lines li, .memory-hits li, .memory-conflicts li { padding:6px 0; border-bottom:1px dashed rgba(255,255,255,.06); font-size:13px; color:#d9d3c8; }
+.memory-lines li:last-child, .memory-hits li:last-child, .memory-conflicts li:last-child { border-bottom:0; }
+.memory-hits li .muted { margin-right:6px; }
 .relation { margin-top:12px; }
 .rel-name { font-size:17px; }
 .rel-stage { display:inline-block; margin:10px 0 8px; padding:3px 10px; border-radius:999px; background:rgba(228,176,122,.12); color:var(--accent); font-size:12px; }

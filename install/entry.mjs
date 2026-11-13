@@ -80,6 +80,7 @@ const server = http.createServer((req, res) => {
         chatUrl: currentUrl(),
         agentName,
         days: requestUrl.searchParams.get('days') || 1,
+        memoryQuery: requestUrl.searchParams.get('memory') || '',
       })
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',

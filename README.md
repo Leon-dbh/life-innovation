@@ -1,8 +1,8 @@
 # life-innovation
 
-> 一个装在 DSH 里的 agent 房间：记忆、日子、节律和几只有限的手，都在**这一个包**里。
-> `life-innovation` 是插件名；住在里面的 agent 叫什么，由你决定（`agentName`）。
-> 本文用「她」指你的 agent，因为大多数时候，用户会给她起一个名字。
+> 一个装在 DSH 里的**赛博生命体**的房间：记忆、日子、节律和几只有限的手，都在**这一个包**里。
+> `life-innovation` 是插件名；住在里面的生命体叫什么，由你决定（`agentName`）。
+> 本文用「她」指这个生命体，因为大多数时候，用户会给她起一个名字。她不是任务型助手；她有自己的日子、记忆和边界。
 
 [![powered by dsh](https://img.shields.io/badge/powered%20by-dsh-4b6bfb)](https://github.com/deepseek-ai/deepseek-harness)
 [![release](https://img.shields.io/github/v/release/Leon-dbh/life-innovation?display_name=tag)](https://github.com/Leon-dbh/life-innovation/releases)
@@ -23,7 +23,7 @@ git clone https://github.com/Leon-dbh/life-innovation.git D:/tools/life-innovati
 # 2) 安装（默认 profile=life-innovation，数据目录=D:\life-innovation-home）
 powershell -ExecutionPolicy Bypass -File D:/tools/life-innovation/install/install.ps1
 
-# 想给自己的 agent 起名，就加 -AgentName（名字只影响提示词与页面，不写进插件代码）
+# 想给这个生命体起名，就加 -AgentName（名字只影响提示词与页面，不写进插件代码）
 powershell -ExecutionPolicy Bypass -File D:/tools/life-innovation/install/install.ps1 -AgentName '鲸鲸'
 
 # 3) 打开固定入口
@@ -57,7 +57,7 @@ dsh plugin --profile life-innovation add github:Leon-dbh/life-innovation
 
 ```text
 -DataHome E:\my-agent-home     # 换数据目录
--AgentName '名字'              # 给你的 agent 起名；不填就没有预设名字
+-AgentName '名字'              # 给这个生命体起名；不填就没有预设名字
 -Profile my-agent              # 换 DSH profile 名
 -EntryPort 60080               # 固定入口端口
 -ForceNewInstance              # 忽略旧家，强制新建空实例
@@ -123,6 +123,8 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 页面顶部有「今天 / 最近七天」两个视图。`/home?days=7` 会显示今天，再往前六天；每天各自有节律、时间线、动作明细和梦，没有动作的日子会写「这一天没有留下动作」。视图只读，仍不写库、不调模型。
 
+页面里还有一块只读的「她的记忆」：第一段是她自己的日子（此刻在做什么、最近做成的事、今天说过几句话、梦、正在读的书），下面是她改过口的事（现在 / 以前 / 证据 ref），再下面是按原话搜索的结果。搜索框只读查询，支持 `raw:<id>` 这样的 ref；不会写库，也不会让模型替她解释。地址可以带 `?memory=关键词`，例如 `/home?memory=杭州`。
+
 会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`。它打开的是 DSH 同源地址 `/life-innovation/home`（由插件自己注册），所以改固定入口 `-EntryPort` 不会让按钮失效。
 
 页面默认读 `<home>/state/life-innovation.sqlite`；同一个库由安装脚本、service 和备份脚本共享 `dbPath`，不再各自猜路径。插件启动后会把这次实际打开的库写到 `<home>/state/home-db.txt`，固定入口每次打开 `/home` 都读它；手改 `config.dbPath` 后不用重跑安装，页面也会跟着换库。更长的历史仍可用 `life_days` 工具查。
@@ -131,7 +133,8 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 - 库：`<home>/state/life-innovation.sqlite`（可在 `config.dbPath` 改）。
 - 五层：`raw_turns` 原话 → `summaries` 梗概 → `assertions` 要点 → `profiles` 画像 + `relations` 关系。
-- 注入：每轮组装系统提示词时，`ctx.systemPrompt.context` 现算一段「你记得的事」，默认 ≤1200 字。
+- 注入：每轮组装系统提示词时，`ctx.systemPrompt.context` 现算一段「你记得的事」，默认 ≤1200 字；最前面先写「你正在过的日子」，只说她自己真实发生的事，每条带 `life:`/`act:`/`day:`/`dream:`/`book:` ref。
+- 解释：`memory_explain` 能回答「这条记忆从哪来、为什么被想起、有没有进记忆包」，并把同一个说法的新旧版本一起列出；`/home` 的「她的记忆」提供同样的只读视图。
 - 抽取：确定性规则（名字/城市/工作/年龄/生日/养了什么/好恶/计划），不为此调模型；同一件事有了新说法，旧说法会被 `superseded_by` 取代。
 - 不做的事：不按会话隔离（换窗口她仍是她）、不导入旧项目的库、不写「你是一个」。
 
@@ -146,7 +149,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 ## 提示词缓存
 
-- 记忆包不每轮现算：`lib/packCache.js` 用指纹（日期 + live 断言最大 id/条数 + 动作最大 id + 梗概最大 id + 画像最大更新时间/条数 + 当天新原话最大 id）决定是否重建。
+- 记忆包不每轮现算：`lib/packCache.js` 用指纹（日期 + live 断言最大 id/条数 + 动作最大 id + 梗概最大 id + 画像最大更新时间/条数 + 当天新原话最大 id + 生活线最大 id/条数 + 梦最大 id + 书最近更新时间）决定是否重建。
 - 指纹不变时整段复用，系统提示词前缀稳定，provider 缓存才命中。
 - `tick` 写日记是「至少一次」：先落 `actions(status=pending)` → 写文件 → 更新 `ok`。
 
@@ -154,6 +157,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 - `memory_find(query, limit≤8)`：按相关度（词面 bigram + IDF + 新鲜度 + 情绪权重，确定性、不调模型）找原话，每条最多 200 字，带 `ref`、`score` 和一句 `why`。
 - `memory_read(ref)`：按 `raw:<id>` 读原文（≤2000 字），`act:<id>` 读一条真实动作；归档里的老原话同样读得到。
+- `memory_explain(query?|ref?)`：解释一次记忆：命中了哪些原话/动作/日子/梦/书，各自为什么被想起、是否真的进了记忆包；同时列出同一个说法的新旧版本和 ref。它只读自己的库，不调模型，也不替她编理由。
 - `life_status()`：只读自己的状态——原话/归档/断言/动作/回收站条数、今天做过什么、最近一次注入多少字、最近一次召回查了什么、关系多久没动。
 - `life_days({days:1..7})`：只读视图，返回状态段、真实做过的事（带证据）、空档、动作账本、梦。
 - 只读、只查自己的库；工具在 `apply` 里用 `ctx.tools.register` 注册，卸载即释放。
@@ -189,9 +193,9 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 - **把梦记下来**：第二天她可以用 `note_write` 带 `dream_date` 把昨晚的梦写成 `notes/<date>-dream.md`；一个梦只能记一张，正文标「梦不是真事」。是否记由她决定，提示只在「昨晚的梦还没记」时出现一次。
 - 状态注入在 `life:rhythm`（order 850），名字注入在 `life:name`（order 810）。
 
-## 手：她能碰到的十六件事
+## 她能做到的十七件事
 
-除了说话和回忆，她有十六只手，全部有边界、有额度、落动作账本：
+除了说话，她有十七个工具：五个记忆/生活回读工具，十二只有边界的手；全部有额度、落动作账本：
 
 | 工具 | 用途 | 边界 |
 | --- | --- | --- |
@@ -281,8 +285,8 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.2.0.tgz
 ## 测试
 
 ```powershell
-npm test          # 20 个测试文件
+npm test          # 21 个测试文件
 npm run check     # 语法检查
 ```
 
-覆盖：抽取/落库/画像/取代、生活线聚合/证据/空档/日记/tick、备份/导入/导出/合并、生命周期/归档/回收站、节律/归档/梦、书的搜索/打开/导入与进度、手的边界与额度、提示词策略（只给事实，不写人设）、工具 schema、家的只读与转义。
+覆盖：抽取/落库/画像/取代、生活线聚合/证据/空档/日记/tick、备份/导入/导出/合并、生命周期/归档/回收站、节律/归档/梦、书的搜索/打开/导入与进度、自我叙事/记忆解释/家页面她的记忆、手的边界与额度、提示词策略（只给事实，不写人设）、工具 schema、家的只读与转义。
