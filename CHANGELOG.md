@@ -2,6 +2,18 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.4.2 — 2026-11-14
+
+让她这一轮真的“想起”相关旧事，而不是只把最近几条塞进提示词；原文一条不删，只决定要不要占预算。
+
+- **`lib/context.js`**：新增 `buildMemoryContext`，按当前用户消息装配四层（自己/相关旧事/近期/未放下的事），默认预算 2400 字；`focusText` 只返回「这一刻想起的旧事」，作为 `life:recall` 动态注入，避免和常驻 `life:memory` 重复。
+- **相邻回答**：命中他说过的话时，把同会话里紧随其后的她那句一起带回；很多“她当时怎么回答”的问题，答案并不和问句共享关键词。
+- **`lib/value.js`**：过滤工具汇报、路径、URL、命令和长日志，保留决定、承诺、情绪、偏好、未完成事项；`selectRecent` 角色平衡，寒暄只在不够时补；只影响注入，不删原文。
+- **`lib/pack.js`**：常驻包里的最近原话从固定 6 条改为 `selectRecent(..., {max:4, perRole:2})`，标题改为「你们最近说的话（只留要紧的）」，每条带 `raw:` ref。
+- **`index.js` / `lib/tools.js`**：注册 `life:recall`（order 910，required false），子智能体不注入；`memory_explain` 同时检查常驻包和当轮上下文，能说清一条记忆为什么被想起。
+- **`tools/life_eval.mjs`**：新增 `contextCoverage`（完整四层，2.4k 预算）与 `promptCoverage`（真实注入的常驻包 + 动态 focus）；真实 50 问从 64% 原始召回提升到 82% 完整上下文覆盖、80% 实际提示词覆盖（同一份库）。
+- **测试**：新增 `tests/value.test.mjs`、`tests/context.test.mjs`；27 个测试文件，`TZ=UTC` 与 `npm run check` 通过。
+
 ## 0.4.1 — 2026-11-14
 
 条件性稳定版，只修 0.4.0 的召回候选问题，不改 schema、不加新功能。

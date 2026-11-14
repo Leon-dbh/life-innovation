@@ -15,7 +15,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MemoryStore } from '../lib/store.js'
 import { rankedRecall } from '../lib/search.js'
-import { buildPack } from '../lib/pack.js'
+import { buildPack, buildPackDetailed } from '../lib/pack.js'
+import { buildMemoryContext } from '../lib/context.js'
 import { addDays, dateKey, startOfDay } from '../lib/life.js'
 
 const DAY = 86400000
@@ -84,20 +85,37 @@ export function evaluateLife({ store, now = Date.now(), queries = [], windowDays
     ? Math.round((toneRows.length / assistantRows.length) * 1000) / 1000
     : null
 
+  let packText = ''
+  try {
+    packText = buildPackDetailed({ store, now, maxChars: 1200 }).text
+  } catch { packText = '' }
+
   const recall = queries.map((q) => {
     const query = String(q.query || q.q || '').trim()
     const expect = String(q.expect || q.expected || '').trim()
     if (!query) return { query, expect, hit: false, refs: [] }
     const out = rankedRecall({ store, query, limit: 3, now })
     const refs = out.hits.map((h) => h.ref || `raw:${h.id}`)
+    const context = buildMemoryContext({ store, userText: query, now, budget: 2400 })
+    // 实际进入提示词的是常驻包 + 动态 focus（index.js 给 life:recall 的预算也是 900）。
+    const focus = buildMemoryContext({ store, userText: query, now, budget: 900 }).focusText
+    const promptText = `${packText}\n\n${focus}`
     return {
       query, expect,
       hit: Boolean(expect) && out.hits.some((h) => String(h.text || '').includes(expect)),
+      contextHit: Boolean(expect) && context.text.includes(expect),
+      contextChars: context.used,
+      promptHit: Boolean(expect) && promptText.includes(expect),
+      promptChars: promptText.length,
       refs,
     }
   })
   const recallHits = recall.filter((r) => r.hit).length
   const recallAt3 = recall.length ? Math.round((recallHits / recall.length) * 1000) / 1000 : null
+  const contextHits = recall.filter((r) => r.contextHit).length
+  const contextCoverage = recall.length ? Math.round((contextHits / recall.length) * 1000) / 1000 : null
+  const promptHits = recall.filter((r) => r.promptHit).length
+  const promptCoverage = recall.length ? Math.round((promptHits / recall.length) * 1000) / 1000 : null
 
   const timings = []
   for (let i = 0; i < Math.max(1, recallRuns); i += 1) {
@@ -136,6 +154,8 @@ export function evaluateLife({ store, now = Date.now(), queries = [], windowDays
       selfConsistency,
       assistantToneRate,
       recallAt3,
+      contextCoverage,
+      promptCoverage,
       token,
       p95RecallMs: p95,
     },
@@ -161,6 +181,8 @@ function markdown(report) {
     `| 自我一致 | ${pct(m.selfConsistency)} |`,
     `| 助手腔 | ${pct(m.assistantToneRate)} |`,
     `| recall@3 | ${pct(m.recallAt3)} |`,
+    `| 上下文覆盖（2.4k） | ${pct(m.contextCoverage)} |`,
+    `| 实际提示词覆盖（常驻+动态） | ${pct(m.promptCoverage)} |`,
     `| token（约） | ${m.token ?? '—'} |`,
     `| p95 召回 | ${m.p95RecallMs ?? '—'} ms |`,
     '',

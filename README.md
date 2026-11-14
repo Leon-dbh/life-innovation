@@ -134,7 +134,8 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 - 库：`<home>/state/life-innovation.sqlite`（可在 `config.dbPath` 改）。
 - 五层：`raw_turns` 原话 → `summaries` 梗概 → `assertions` 要点 → `profiles` 画像 + `relations` 关系。
 - 注入：每轮组装系统提示词时，`ctx.systemPrompt.context` 现算一段「你记得的事」，默认 ≤1200 字；最前面先写「你正在过的日子」，只说她自己真实发生的事，每条带 `life:`/`act:`/`day:`/`dream:`/`book:` ref。
-- 解释：`memory_explain` 能回答「这条记忆从哪来、为什么被想起、有没有进记忆包」，并把同一个说法的新旧版本一起列出；梗概和睡眠巩固也能用 `sum:<id>` / `self:<id>` 回读。`/home` 的「她的记忆」提供同样的只读视图。
+- 当轮上下文：静态记忆包后面还有一层 `life:recall`（order 910），只按当前这句话补「这一刻想起的旧事」，不重复常驻包。命中他说过的话时，会把他那句和紧随其后的她的回答一起带回；工具汇报、路径、命令和长日志不进这一层。原文一条不删，删的只是这一轮要不要占提示词。
+- 解释：`memory_explain` 能回答「这条记忆从哪来、为什么被想起、有没有进记忆包」，并区分是常驻记忆包还是当轮的相关旧事；同一个说法的新旧版本一起列出；梗概和睡眠巩固也能用 `sum:<id>` / `self:<id>` 回读。`/home` 的「她的记忆」提供同样的只读视图。
 - 时间线：`memory_timeline` 把某一天的原话、动作、梦、书、日子章节和节律状态缝成一条只读时间线，每条带 ref。
 - 睡眠巩固：已经 `close_day` 收起来的日子，每天生成一条 `self_snapshots`；只从真实记录里取，不调模型、不编造；重复 tick 不会重复写。
 - 分层回忆：`summaries` 保留 `source_refs`（可回读的原话），检索以 bigram + IDF 为主，SQLite FTS5 trigram 为长词补充；双字中文仍走原来的 bigram/LIKE。候选池会按每个词各取一小批，不让最近的高频词把很久以前的稀有旧事挤出召回。
@@ -288,7 +289,7 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.2.0.tgz
 ## 测试
 
 ```powershell
-npm test          # 25 个测试文件
+npm test          # 27 个测试文件
 npm run check     # 语法检查
 ```
 

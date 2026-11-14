@@ -40,6 +40,12 @@ const report = evaluateLife({
   ],
 })
 assert.equal(report.metrics.recallAt3, 0.667)
+assert.equal(report.metrics.contextCoverage, 0.667)
+assert.equal(report.metrics.promptCoverage, 0.667)
+assert.equal(report.recall[0].contextHit, true)
+assert.equal(report.recall[0].promptHit, true)
+assert.ok(report.recall.every((r) => Number(r.contextChars) > 0))
+assert.ok(report.recall.every((r) => Number(r.promptChars) >= 0))
 assert.equal(report.metrics.repairRate, 1)
 assert.equal(report.metrics.assistantToneRate, 1 / 2)
 assert.ok(report.metrics.continuity7d > 0)

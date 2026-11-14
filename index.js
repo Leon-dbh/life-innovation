@@ -12,6 +12,7 @@ import { MemoryStore } from './lib/store.js'
 import { extractAssertions } from './lib/extract.js'
 import { maybeSummarize } from './lib/summaries.js'
 import { createPackCache } from './lib/packCache.js'
+import { buildMemoryContext } from './lib/context.js'
 import { syncDay, tick } from './lib/life.js'
 import { reconcileOnStart, syncPhase, tickRhythm, rhythmText } from './lib/rhythm.js'
 import { registerMemoryTools } from './lib/tools.js'
@@ -149,6 +150,10 @@ export function apply(ctx, config = {}) {
 
   // 记忆块按指纹缓存：只有记忆真的变了才重建，保住系统提示词的前缀缓存。
   const packCache = createPackCache({ store, maxChars, subject: SUBJECT })
+
+  // 这一轮的话题。动态的「相关旧事」只接在静态记忆包后面，避免破坏前面的缓存。
+  let latestUserText = ''
+  let latestUserSession = ''
   guarded('记忆注入', () => ctx.systemPrompt.context({
     name: 'life:memory',
     order: 900,
@@ -159,6 +164,26 @@ export function apply(ctx, config = {}) {
         return packCache.get(Date.now())
       } catch (error) {
         ctx.logger?.warn?.(`[life-innovation] 记忆包组装失败：${error?.message || error}`)
+        return ''
+      }
+    },
+  }))
+
+  guarded('相关旧事注入', () => ctx.systemPrompt.context({
+    name: 'life:recall',
+    order: 910,
+    required: false,
+    interpolate: false,
+    text: (promptContext) => {
+      const agent = promptContext?.agent
+      if (agent?.session?.header?.origin === 'subagent') return ''
+      const sessionId = String(agent?.session?.id || promptContext?.session?.id || '')
+      const text = (!sessionId || !latestUserSession || sessionId === latestUserSession) ? latestUserText : ''
+      if (!text) return ''
+      try {
+        return buildMemoryContext({ store, userText: text, now: Date.now(), budget: 900, subject: SUBJECT }).focusText
+      } catch (error) {
+        ctx.logger?.warn?.(`[life-innovation] 相关旧事组装失败：${error?.message || error}`)
         return ''
       }
     },
@@ -295,6 +320,10 @@ export function apply(ctx, config = {}) {
         // 有人说话、或她刚回完，状态立刻切到醒着；其余状态由 60 秒 tick 推进。
         syncPhase({ store, now: ts })
       })
+      if (type === 'user/message') {
+        latestUserText = text
+        latestUserSession = sessionId
+      }
     } catch (error) {
       ctx.logger?.warn?.(`[life-innovation] 记这一轮失败：${error?.message || error}`)
     }
