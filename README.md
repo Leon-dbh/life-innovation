@@ -7,6 +7,8 @@
 [![powered by dsh](https://img.shields.io/badge/powered%20by-dsh-4b6bfb)](https://github.com/deepseek-ai/deepseek-harness)
 [![release](https://img.shields.io/github/v/release/Leon-dbh/life-innovation?display_name=tag)](https://github.com/Leon-dbh/life-innovation/releases)
 
+[English README](README.en.md)
+
 一个包带来四样东西：
 
 - **房间**：`life-innovation` preset，只给事实，不写人设；
@@ -39,6 +41,15 @@ dsh plugin --profile life-innovation add github:Leon-dbh/life-innovation
 或者下载 Release 里的离线包：<https://github.com/Leon-dbh/life-innovation/releases/latest>
 
 仓库根目录**就是**插件包，没有子包。
+
+装完不放心，先让她自检：
+
+```powershell
+node D:/tools/life-innovation/tools/doctor.mjs
+# 机器可读：node tools/doctor.mjs --json
+```
+
+doctor 只读检查 Node 22、家目录/可写、数据库与缺表、插件版本、`DSH_HOME`、60080/60081/8789 端口；每项都给下一步，不会建库或改配置。
 
 ## 十分钟装起来
 
@@ -119,11 +130,14 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 ## 她的家页面
 
-固定入口 `http://127.0.0.1:60080/home` 是只读仪表盘：今天做了什么、记得关于你的事、关系、梗概、梦（梦会标「不是真事」）。当天还没有梦时，页面会显示昨天那条并标「昨晚的梦 · 日期」，不会误报「还没有梦」；页面以只读连接读同一个 SQLite，不写库、不调模型、不替她说话；所有文本转义，90 秒自动刷新。
+固定入口 `http://127.0.0.1:60080/home` 是只读的家：今天做了什么、她记得关于你的事、她的房间、她自己记得的样子，分成四个角落。梦会标「不是真事」；当天还没有梦时，页面会显示昨天那条并标「昨晚的梦 · 日期」，不会误报「还没有梦」；页面以只读连接读同一个 SQLite，不写库、不调模型、不替她说话；所有文本转义，90 秒自动刷新。
 
-页面顶部有「今天 / 最近七天」两个视图。`/home?days=7` 会显示今天，再往前六天；每天各自有节律、时间线、动作明细和梦，没有动作的日子会写「这一天没有留下动作」。视图只读，仍不写库、不调模型。
+- `?view=today`（默认）：今天与最近七天，节律、时间线、动作明细和梦；没有动作的日子会写「这一天没有留下动作」。
+- `?view=memory`：她记得的事、关系、只读的「她的记忆」、睡眠巩固、更早梗概，以及整理过的审计记录。
+- `?view=room`：她的便签、日记、书架、最近在读和梦；只列文件名与正文，不暴露绝对路径。
+- `?view=self`：她自己记得的样子、最近的梦、关系与睡眠巩固。
 
-页面里还有一块只读的「她的记忆」：第一段是她自己的日子（此刻在做什么、最近做成的事、今天说过几句话、梦、正在读的书），下面是她改过口的事（现在 / 以前 / 证据 ref），再下面是按原话搜索的结果。搜索框只读查询，支持 `raw:<id>` 这样的 ref；不会写库，也不会让模型替她解释。地址可以带 `?memory=关键词`，例如 `/home?memory=杭州`。如果她最近已经收起来过一天，页面还会显示那天睡眠巩固留下的一小段「收起来的时候」。
+页面里那块只读的「她的记忆」：第一段是她自己的日子（此刻在做什么、最近做成的事、今天说过几句话、梦、正在读的书），下面是她改过口的事（现在 / 以前 / 证据 ref），再下面是按原话搜索的结果。搜索框只读查询，支持 `raw:<id>` 这样的 ref；不会写库，也不会让模型替她解释。地址可以带 `?memory=关键词`，例如 `/home?memory=杭州`。如果她最近已经收起来过一天，页面还会显示那天睡眠巩固留下的一小段「收起来的时候」。
 
 会话标题栏右侧有一个「家」按钮，由 `client.js` 注册到 `conversation.session.header.actions`。它打开的是 DSH 同源地址 `/life-innovation/home`（由插件自己注册），所以改固定入口 `-EntryPort` 不会让按钮失效。
 
@@ -197,12 +211,14 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 - **把梦记下来**：第二天她可以用 `note_write` 带 `dream_date` 把昨晚的梦写成 `notes/<date>-dream.md`；一个梦只能记一张，正文标「梦不是真事」。是否记由她决定，提示只在「昨晚的梦还没记」时出现一次。
 - 状态注入在 `life:rhythm`（order 850），名字注入在 `life:name`（order 810）。
 
-## 她能做到的十八件事
+## 她能做到的二十件事
 
-除了说话，她有十八个工具：六个记忆/生活回读工具，十二只有边界的手；全部有额度、落动作账本：
+除了说话，她有二十个工具：八个记忆/生活回读与整理工具，十二只有边界的手；全部有额度、落动作账本：
 
 | 工具 | 用途 | 边界 |
 | --- | --- | --- |
+| `memory_forget` | 把一条记忆从召回和阅读里拿走 | 默认只预览，不动库；必须把 `confirm` 写成和 `ref` 完全一样才执行；只进回收站，不删 payload；落 `memory_audit` |
+| `memory_restore` | 按回收站编号把一条记忆放回来 | 只读自己的回收站；恢复后重新参与召回；落 `memory_audit` |
 | `room_list` / `room_read` | 看/读自己家里的日记、便签、书 | `room_list` 可列 `diary/`、`notes/`、`books/`、`backups/`；`room_read` 只读前三处；路径牢笼拒绝 `..`、盘符、符号链接逃逸 |
 | `note_write` | 写便签存进 `notes/`；可带 `dream_date` 记昨晚的梦 | 每天 3 张、每张 2000 字；同名不覆盖；一个梦只能记一张 |
 | `book_next` | 从自己书架上的书读一段 | 每天 4 段；首次下载后只读本地；正文按 1800 字分段 |
@@ -229,6 +245,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 - preset 挂 `@deepseek-ai/dsh-tool-schedule`，她可自己定闹钟（`schedule_create/list/update/delete`）。
 - 到点由 Host 投递一条 `source.kind='schedule'` 的消息唤醒她；任务与投递记录在 `$DSH_HOME/storages/schedule.json`，重启不丢，过期只补最近一次。
+- **默认不主动外发**：安静时的 `quietAction` 只写便签/翻书/记账，不发消息；`notify` 也只在被明确调用时弹一条本机通知。0.5.0 没有“到点自己找他”的默认路径。
 
 ## 外发账本（未接渠道）
 
@@ -268,14 +285,14 @@ powershell -ExecutionPolicy Bypass -File install\install.ps1 -StartService
 ## 打包与离线安装
 
 ```powershell
-npm pack     # 得到 life-innovation-0.2.0.tgz
+npm pack     # 得到 life-innovation-0.5.0.tgz
 
 # 在另一台机器上（先建好 profile，或跑 install.ps1 -SkipPluginAdd）
-dsh plugin --profile life-innovation add D:\path\life-innovation-0.2.0.tgz
+dsh plugin --profile life-innovation add D:\path\life-innovation-0.5.0.tgz
 ```
 
 - 离线包装的是同一份代码（`index.js`、`client.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`、`locale/`）。
-- `npm publish`：包名 `life-innovation` 目前未被占用；登录后 `npm publish` 即可。
+- `npm publish`：包名 `life-innovation` 已发布，登录后用 `npm publish` 发新版本。
 - GitHub Release 里附 `.tgz`，别人不装 Node 工具链也能下载。
 
 ## 0.2.0 的破坏性改名
@@ -289,8 +306,8 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.2.0.tgz
 ## 测试
 
 ```powershell
-npm test          # 27 个测试文件
+npm test          # 28 个测试文件
 npm run check     # 语法检查
 ```
 
-覆盖：抽取/落库/画像/取代、生活线聚合/证据/空档/日记/tick、备份/导入/导出/合并、生命周期/归档/回收站、节律/归档/梦、书的搜索/打开/导入与进度、自我叙事/记忆解释/家页面她的记忆、手的边界与额度、提示词策略（只给事实，不写人设）、工具 schema、家的只读与转义。
+覆盖：抽取/落库/画像/取代、生活线聚合/证据/空档/日记/tick、备份/导入/导出/合并、生命周期/归档/回收站/显式遗忘与恢复/审计、节律/归档/梦、书的搜索/打开/导入与进度、自我叙事/记忆解释/家页面四视角、意愿层（安全底线/低电量/社交电量）、手的边界与额度、提示词策略（只给事实，不写人设）、工具 schema、家的只读与转义。

@@ -15,6 +15,7 @@ import { createPackCache } from './lib/packCache.js'
 import { buildMemoryContext } from './lib/context.js'
 import { syncDay, tick } from './lib/life.js'
 import { reconcileOnStart, syncPhase, tickRhythm, rhythmText } from './lib/rhythm.js'
+import { willText, currentWill } from './lib/will.js'
 import { registerMemoryTools } from './lib/tools.js'
 import { createHands } from './lib/hands.js'
 import { resolvePaths } from './lib/paths.js'
@@ -129,7 +130,7 @@ export function apply(ctx, config = {}) {
           const requestUrl = new URL(req.url || '/life-innovation/home', 'http://127.0.0.1')
           let html
           try {
-            html = renderHome({ home, dbPath, now: Date.now(), chatUrl: '/', agentName, days: requestUrl.searchParams.get('days') || 1 })
+            html = renderHome({ home, dbPath, now: Date.now(), chatUrl: '/', agentName, days: requestUrl.searchParams.get('days') || 1, memoryQuery: requestUrl.searchParams.get('memory') || '', view: requestUrl.searchParams.get('view') || 'today' })
           } catch (error) {
             html = renderHomeError(error, agentName)
             res.writeHead(503, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
@@ -219,6 +220,23 @@ export function apply(ctx, config = {}) {
         return rhythmText({ store, now: Date.now(), hasDreamNote: (d) => Boolean(hands && hands.dreamNoteExists(d)) })
       } catch (error) {
         ctx.logger?.warn?.(`[life-innovation] 节律文本失败：${error?.message || error}`)
+        return ''
+      }
+    },
+  }))
+
+  // 她此刻的意愿：不是系统闸门，只给她一个可以拒绝/推迟的基调。
+  // 安全、急救、隐私、平台额度永远优先；这些由 willText 明确写死。
+  guarded('意愿注入', () => ctx.systemPrompt.context({
+    name: 'life:will',
+    order: 860,
+    required: false,
+    interpolate: false,
+    text: () => {
+      try {
+        return willText({ store, now: Date.now(), text: latestUserText })
+      } catch (error) {
+        ctx.logger?.warn?.(`[life-innovation] 意愿文本失败：${error?.message || error}`)
         return ''
       }
     },
@@ -323,6 +341,16 @@ export function apply(ctx, config = {}) {
       if (type === 'user/message') {
         latestUserText = text
         latestUserSession = sessionId
+        try {
+          const will = currentWill({ store, now: ts, text })
+          if (will.decision !== 'allow') {
+            store.addAction({
+              ts, sessionId, kind: 'life', tool: 'will_decision',
+              summary: `${will.decision === 'refuse' ? '不想接' : '想缓一缓'}：${will.reason}`,
+              callId: `will:${sessionId}:${ts}`, status: 'ok', meta: { decision: will.decision },
+            })
+          }
+        } catch { /* 意愿只是基调，不能因为记录失败挡住这一轮 */ }
       }
     } catch (error) {
       ctx.logger?.warn?.(`[life-innovation] 记这一轮失败：${error?.message || error}`)

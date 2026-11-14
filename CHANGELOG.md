@@ -2,6 +2,19 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.5.0 — 2026-11-14
+
+把「家」从一块仪表盘变成四个只读的角落，并补上她整理记忆、拒绝/推迟的边界。
+
+- **四视角的家**：`/home` 分 `today`（今天/最近七天）、`memory`（她记得）、`room`（她的房间：便签/日记/书架/最近在读/梦）、`self`（她是谁：自我叙事/梦/关系/巩固）；默认今天不再把所有事实堆在一起。
+- **显式遗忘与恢复**：新增 `memory_forget` / `memory_restore`；默认只预览，`confirm` 必须与 `ref` 完全一致才执行；只进回收站，不删 payload；`memory_audit` 记录谁、何时、为什么。
+- **回收站与审计**：`store.recycleRaw` 支持原因/操作者并写审计，清理证据时也处理 `self_snapshots`；恢复同样留痕。
+- **意愿层**：`lib/will.js` 只影响非安全请求；夜里低电量、社交电量低、手上有没做完的事时，她可以短回、推迟或说不；安全/急救/隐私/额度永远优先，不能用“累了”推掉。`life:will`（order 860）只给行为基调，不把分数写进提示词。
+- **工具**：从 18 个变 20 个；`tests/tools.test.mjs` 覆盖预演、错确认、执行、恢复与审计；`tests/jsonschema.test.mjs` 计数 20。
+- **安装自检**：新增 `tools/doctor.mjs`（Node/家目录/可写/数据库缺表/插件版本/DSH_HOME/60080·60081·8789），只读、给下一步；`package.json` 加 `doctor` 脚本。
+- **英文与演示**：新增 `README.en.md`（a cyber lifeform that lives in DSH）与 `docs/demo-60s.md` 演示脚本；中文 README 补 doctor 与四视角说明。
+- **测试**：新增 `tests/will.test.mjs`；更新 `tests/home.test.mjs` 覆盖四视角/房间/审计/只读；28 个测试文件，`TZ=UTC` 与 `npm run check` 通过。
+
 ## 0.4.3 — 2026-11-14
 
 把「较早的原话」从逐句截断改成有结构的梗概：先保决定、未完成的事和情绪，再补生活事实；工具汇报和长日志不进梗概。原文一条不删，`source_refs` 不变。

@@ -81,6 +81,7 @@ const server = http.createServer((req, res) => {
         agentName,
         days: requestUrl.searchParams.get('days') || 1,
         memoryQuery: requestUrl.searchParams.get('memory') || '',
+        view: requestUrl.searchParams.get('view') || 'today',
       })
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',

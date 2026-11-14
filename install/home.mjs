@@ -270,6 +270,7 @@ export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = tr
       memoryQuery: String(memoryQuery || '').trim(),
       memoryHits: memoryHits(db, memoryQuery),
       conflicts: conflictRows(db),
+      audit: rows(db, 'SELECT id, ts, action, ref, reason, actor FROM memory_audit ORDER BY id DESC LIMIT 8'),
       snapshot: snapshot || null,
       stats: {
         raw: count(db, 'raw_turns'),
@@ -519,8 +520,23 @@ function clampDays(value) {
 }
 
 function reviewTabs(days) {
-  const link = (n, label) => `<a href="?days=${n}"${days === n ? ' class="active" aria-current="page"' : ''}>${label}</a>`
-  return `<nav class="tabs" aria-label="查看范围">${link(1, '今天')}${link(7, '最近七天')}</nav>`
+  const link = (n, label) => `<a href="?view=today&amp;days=${n}"${days === n ? ' class="active" aria-current="page"' : ''}>${label}</a>`
+  return `<nav class="tabs day-tabs" aria-label="查看范围">${link(1, '今天')}${link(7, '最近七天')}</nav>`
+}
+
+function viewTabs(view, days, memoryQuery) {
+  const items = [
+    ['today', '今天'],
+    ['memory', '她记得'],
+    ['room', '她的房间'],
+    ['self', '她是谁'],
+  ]
+  return `<nav class="tabs home-tabs" aria-label="家的四个角落">${items.map(([key, label]) => {
+    let href = `?view=${key}`
+    if (key === 'today' && days > 1) href += `&amp;days=${days}`
+    if (key === 'memory' && memoryQuery) href += `&amp;memory=${encodeURIComponent(memoryQuery).replace(/&/g, '&amp;')}`
+    return `<a href="${href}"${view === key ? ' class="active" aria-current="page"' : ''}>${label}</a>`
+  }).join('')}</nav>`
 }
 
 function collectPreviousDays({ home, dbPath, now, days }) {
@@ -586,7 +602,118 @@ function weekBlock(days) {
   </section>`
 }
 
-export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agentName = '', days = 1, memoryQuery = '' }) {
+function roomFiles(home, sub, limit = 6) {
+  const dir = path.join(home, sub)
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isFile() && !e.name.startsWith('.') && /\.(md|txt)$/i.test(e.name))
+      .map((e) => {
+        const file = path.join(dir, e.name)
+        const stat = fs.statSync(file)
+        return { name: e.name, mtime: stat.mtimeMs, text: fs.readFileSync(file, 'utf8') }
+      })
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, limit)
+  } catch {
+    return []
+  }
+}
+
+function roomShelf(home, sub, eyebrow, title) {
+  const files = roomFiles(home, sub)
+  const body = files.length
+    ? `<div class="room-list">${files.map((f) => `<article class="room-note">
+        <div class="room-when">${esc(fmtWhen(f.mtime))} · ${esc(f.name)}</div>
+        <p>${esc(clip(f.text, 700))}</p>
+      </article>`).join('')}</div>`
+    : `<p class="empty">这里还空着。她还没有把${esc(title)}放进来。</p>`
+  return `<section class="card room-shelf">
+    <div class="eyebrow">${esc(eyebrow)}</div>
+    <h2>${esc(title)}</h2>
+    ${body}
+  </section>`
+}
+
+function roomBlock(home, data) {
+  const book = data.book
+  const reading = book && book.total > 0
+    ? `<div class="room-book"><div class="eyebrow">最近在读</div><h2>《${esc(clip(book.title, 40))}》</h2>
+       <p class="empty">读到 ${Math.floor((Number(book.offset) / Number(book.total)) * 100)}%。书还在她的书架上。</p></div>`
+    : '<p class="empty">她最近没有翻书。</p>'
+  return `<div class="room-grid">
+    ${roomShelf(home, 'notes', '便签', '她写下的便签')}
+    ${roomShelf(home, 'diary', '日记', '她收起来的日子')}
+    ${roomShelf(home, 'books', '书架', '她读过的书')}
+    <section class="card">
+      <div class="eyebrow">书架</div>
+      <h2>她最近在读</h2>
+      ${reading}
+      ${dreamBlock(data.dreams, data.today)}
+    </section>
+  </div>`
+}
+
+function auditBlock(audits) {
+  const list = Array.isArray(audits) ? audits : []
+  if (!list.length) return ''
+  return `<section class="card audit">
+    <div class="eyebrow">她整理过的</div>
+    <h2>忘掉与找回</h2>
+    <ul class="memory-lines">${list.map((a) => `<li>
+      <span class="muted">${esc(fmtWhen(a.ts))}</span>
+      ${a.action === 'restore' ? '找回' : '忘掉'} <code>${esc(a.ref)}</code>
+      ${a.actor ? `· ${esc(a.actor)}` : ''}${a.reason ? ` · ${esc(a.reason)}` : ''}
+    </li>`).join('')}</ul>
+  </section>`
+}
+
+function memoryView(data, span) {
+  return `<div class="grid">
+      <section class="card">
+        <div class="eyebrow">她最近想着的</div>
+        <h2>记得的关于你的事</h2>
+        ${factsBlock(data.facts, data.now)}
+      </section>
+      <section class="card">
+        <div class="eyebrow">你们</div>
+        <h2>关系</h2>
+        ${relationBlock(data.relation, data.name, '')}
+      </section>
+    </div>
+    ${memorySection(data, span)}
+    ${snapshotBlock(data.snapshot)}
+    <section class="card">
+      <div class="eyebrow">更早</div>
+      <h2>她叠起来的印象</h2>
+      ${summaryBlock(data.summaries)}
+    </section>
+    ${auditBlock(data.audit)}`
+}
+
+function selfView(data) {
+  const lines = data.self?.lines || []
+  return `<section class="card self-card">
+    <div class="eyebrow">她是谁</div>
+    <h2>她自己记得的样子</h2>
+    ${lines.length ? `<ul class="memory-lines">${lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>` : '<p class="empty">她还没有留下关于自己的记录。</p>'}
+    <p class="empty">这里不是人格设定，也不是别人给她的形容词；只是她从自己的日子里留下的痕迹。</p>
+  </section>
+  <div class="grid">
+    <section class="card">
+      <div class="eyebrow">夜里</div>
+      <h2>最近的梦</h2>
+      ${dreamBlock(data.dreams, data.today)}
+    </section>
+    <section class="card">
+      <div class="eyebrow">你们</div>
+      <h2>关系</h2>
+      ${relationBlock(data.relation, data.name, '')}
+    </section>
+  </div>
+  ${snapshotBlock(data.snapshot)}`
+}
+
+export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agentName = '', days = 1, memoryQuery = '', view = 'today' }) {
   const span = clampDays(days)
   const data = collectHome({ home, dbPath, now, memoryQuery })
   const pastDays = !data.missing && span > 1 ? collectPreviousDays({ home, dbPath, now, days: span }) : []
@@ -600,10 +727,8 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
     ? `<a class="back" href="${esc(chatUrl)}">回她的房间 <span>→</span></a>`
     : '<span class="back muted">房间这会儿没开</span>'
 
-  const body = data.missing
-    ? `<section class="card"><h2>她还没有家</h2>
-       <p class="empty">数据库还没建：${esc(data.error || '找不到记忆库')}。<br>等她第一次醒来、说上话，这里就会有东西。</p></section>`
-    : `${reviewTabs(span)}<section class="today">
+  const activeView = ['today', 'memory', 'room', 'self'].includes(String(view)) ? String(view) : 'today'
+  const todaySection = `<section class="today">
         <div class="day-head">
           <div>
             <div class="eyebrow">今天</div>
@@ -620,54 +745,34 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
 
         <div class="track-wrap" aria-label="今天的节律">
           <div class="track">
-            ${track(data.phases, dayStart, now, total)}
+            ${track(data.phases || [], dayStart, now, total)}
             ${now >= dayStart && now <= dayStart + total
               ? `<span class="nowline" style="left:${(((now - dayStart) / total) * 100).toFixed(3)}%"></span>`
               : ''}
           </div>
           <div class="ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
-          <div class="legend-row">${phaseLegend(data.phases) || '<span class="muted">今天还没有节律记录</span>'}</div>
+          <div class="legend-row">${phaseLegend(data.phases || []) || '<span class="muted">今天还没有节律记录</span>'}</div>
         </div>
 
         <h3>她做过的事</h3>
-        ${timeline(data.blocks)}
+        ${timeline(data.blocks || [])}
 
-        ${data.actions.length ? `<details class="actions">
+        ${(data.actions || []).length ? `<details class="actions">
           <summary>动作明细（${data.actions.length}）</summary>
           <ul>${data.actions.map((a) => `<li><time>${esc(clock(a.ts))}</time><code>${esc(a.tool)}</code><span>${esc(a.summary || '')}</span></li>`).join('')}</ul>
         </details>` : ''}
-      </section>
-      ${weekBlock(pastDays)}
 
-      <div class="grid">
-        <section class="card">
-          <div class="eyebrow">她最近想着的</div>
-          <h2>记得的关于你的事</h2>
-          ${factsBlock(data.facts, data.now)}
-        </section>
-        <section class="card">
-          <div class="eyebrow">你们</div>
-          <h2>关系</h2>
-          ${relationBlock(data.relation, data.name, agentName)}
-        </section>
-      </div>
+        ${(data.dreams || []).length ? `<h3>梦</h3>${dreamBlock(data.dreams, data.today)}` : ''}
+      </section>`
 
-      ${memorySection(data, span)}
-      ${snapshotBlock(data.snapshot)}
-
-      <div class="grid">
-        <section class="card">
-          <div class="eyebrow">更早</div>
-          <h2>她叠起来的印象</h2>
-          ${summaryBlock(data.summaries)}
-        </section>
-        <section class="card">
-          <div class="eyebrow">夜里</div>
-          <h2>梦</h2>
-          ${dreamBlock(data.dreams, data.today)}
-        </section>
-      </div>
-
+  const body = data.missing
+    ? `<section class="card"><h2>她还没有家</h2>
+       <p class="empty">数据库还没建：${esc(data.error || '找不到记忆库')}。<br>等她第一次醒来、说上话，这里就会有东西。</p></section>`
+    : `${viewTabs(activeView, span, memoryQuery)}
+      ${activeView === 'today' ? `${reviewTabs(span)}${todaySection}${weekBlock(pastDays)}` : ''}
+      ${activeView === 'memory' ? memoryView(data, span) : ''}
+      ${activeView === 'room' ? roomBlock(home, data) : ''}
+      ${activeView === 'self' ? selfView(data) : ''}
       <footer>
         <div class="stats">${statsLine(data.stats)}</div>
         <div class="muted">这一页只读：不写库、不改记忆、不替她说话。数据来自她自己的记忆库。</div>
@@ -702,6 +807,10 @@ h1 { font-family:"Songti SC","Noto Serif SC",SimSun,serif; font-weight:500; font
 .tabs a { color:var(--muted); text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:7px 14px; font-size:12px; }
 .tabs a:hover { color:var(--ink); border-color:rgba(241,236,226,.3); }
 .tabs a.active { color:#0e1014; background:var(--accent); border-color:var(--accent); }
+.home-tabs { margin-bottom:14px; }
+.home-tabs a { font-size:14px; padding:9px 18px; }
+.day-tabs { margin:0 0 14px; }
+.day-tabs a { font-size:11px; padding:5px 12px; }
 .today { background:linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015)); border:1px solid var(--line); border-radius:22px; padding:26px 28px 24px; }
 .week { margin-top:26px; }
 .week-head { margin:0 0 14px; }
@@ -744,6 +853,14 @@ h3 { font-size:14px; font-weight:500; color:var(--muted); margin:28px 0 12px; le
 .actions code { color:var(--accent); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:11px; }
 .grid { display:grid; grid-template-columns:1.15fr .85fr; gap:18px; margin-top:18px; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:22px 24px; }
+.room-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:18px; }
+.room-list { display:grid; gap:10px; margin-top:12px; }
+.room-note { border-left:2px solid rgba(228,176,122,.35); padding:2px 0 2px 12px; }
+.room-when { color:var(--muted); font-size:11px; letter-spacing:.04em; }
+.room-note p { margin:5px 0 0; color:#d9d3c8; font-size:13px; white-space:pre-wrap; }
+.room-book { margin-top:12px; }
+.audit code { color:var(--accent); font-size:11px; }
+.self-card { margin-top:18px; }
 .facts { list-style:none; margin:12px 0 0; padding:0; }
 .facts li { padding:6px 0; border-bottom:1px dashed rgba(255,255,255,.06); font-size:14px; }
 .facts li:last-child { border-bottom:0; }
@@ -774,6 +891,7 @@ footer { margin-top:26px; border-top:1px solid var(--line); padding-top:16px; di
   header { flex-direction:column; align-items:flex-start; gap:12px; }
   h1 { font-size:34px; }
   .grid { grid-template-columns:1fr; }
+  .room-grid { grid-template-columns:1fr; }
   .timeline li { grid-template-columns:88px 1fr; }
   .timeline li .ev { grid-column:2; justify-self:start; }
   .chips { justify-content:flex-start; }
