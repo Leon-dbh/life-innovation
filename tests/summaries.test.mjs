@@ -10,6 +10,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { MemoryStore } from '../lib/store.js'
 import { maybeSummarize } from '../lib/summaries.js'
+import { summarizeStructured } from '../lib/extract.js'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jingjing-sum-'))
 const store = new MemoryStore(path.join(dir, 'sum.sqlite'))
@@ -28,6 +29,20 @@ assert.deepEqual(first.sourceRefs, ['raw:1', 'raw:2', 'raw:3', 'raw:4'], '梗概
 const stored = store.recentSummaries(1)[0]
 assert.deepEqual(stored.sourceRefs, first.sourceRefs)
 assert.equal(store.summaryById(stored.id).text, first.text)
+
+// 结构化梗概：先保决定/未完成/情绪，工具汇报和超长回复不进梗概。
+const structured = summarizeStructured([
+  { id: 1, ts: base, role: 'user', text: '我决定明天开始早起' },
+  { id: 2, ts: base + 1, role: 'her', text: '周末要不要去看展？' },
+  { id: 3, ts: base + 2, role: 'user', text: '今天有点累' },
+  { id: 4, ts: base + 3, role: 'her', text: '工具返回：https://example.com/very/long/path' },
+  { id: 5, ts: base + 4, role: 'user', text: '今天吃了面' },
+], 240)
+assert.match(structured, /决定：.*早起/)
+assert.match(structured, /没放下：.*看展/)
+assert.match(structured, /情绪：.*累/)
+assert.ok(!structured.includes('http'), '工具汇报不进梗概')
+assert.ok(structured.length <= 240, '梗概不超过预算')
 
 // 水位推进后，没有新原话就不该重复压同一批。
 assert.equal(maybeSummarize({ store, sessionId: 's1', ts: base + 300 }), null)
