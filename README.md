@@ -49,7 +49,7 @@ node D:/tools/life-innovation/tools/doctor.mjs
 # 机器可读：node tools/doctor.mjs --json
 ```
 
-doctor 只读检查 Node 22、家目录/可写、数据库与缺表、插件版本、`DSH_HOME`、60080/60081/8789 端口；每项都给下一步，不会建库或改配置。
+doctor 只读检查 Node 22、家目录/可写、数据库与缺表、插件版本、`DSH_HOME`、profile 里的插件挂载、60080/60081/8789 端口；每项都给下一步，不会建库或改配置。
 
 ## 十分钟装起来
 
@@ -130,7 +130,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 ## 她的家页面
 
-固定入口 `http://127.0.0.1:60080/home` 是只读的家：今天做了什么、她记得关于你的事、她的房间、她自己记得的样子，分成四个角落。梦会标「不是真事」；当天还没有梦时，页面会显示昨天那条并标「昨晚的梦 · 日期」，不会误报「还没有梦」；页面以只读连接读同一个 SQLite，不写库、不调模型、不替她说话；所有文本转义，90 秒自动刷新。
+固定入口 `http://127.0.0.1:60080/home` 是只读的家：今天做了什么、她记得关于你的事、她的房间、她自己记得的样子，分成四个角落。刚装好、还没说过话时，今天的页面会先给三步「把她接到你家」：先跟她说一句话、回来看今天、去她的房间。梦会标「不是真事」；当天还没有梦时，页面会显示昨天那条并标「昨晚的梦 · 日期」，不会误报「还没有梦」；页面以只读连接读同一个 SQLite，不写库、不调模型、不替她说话；所有文本转义，90 秒自动刷新。
 
 - `?view=today`（默认）：今天与最近七天，节律、时间线、动作明细和梦；没有动作的日子会写「这一天没有留下动作」。
 - `?view=memory`：她记得的事、关系、只读的「她的记忆」、睡眠巩固、更早梗概，以及整理过的审计记录。
@@ -285,10 +285,10 @@ powershell -ExecutionPolicy Bypass -File install\install.ps1 -StartService
 ## 打包与离线安装
 
 ```powershell
-npm pack     # 得到 life-innovation-0.5.0.tgz
+npm pack     # 得到 life-innovation-0.5.1.tgz
 
 # 在另一台机器上（先建好 profile，或跑 install.ps1 -SkipPluginAdd）
-dsh plugin --profile life-innovation add D:\path\life-innovation-0.5.0.tgz
+dsh plugin --profile life-innovation add D:\path\life-innovation-0.5.1.tgz
 ```
 
 - 离线包装的是同一份代码（`index.js`、`client.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`、`locale/`）。

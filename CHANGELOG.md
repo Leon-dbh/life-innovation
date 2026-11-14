@@ -2,6 +2,14 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.5.1 — 2026-11-14
+
+把「刚住进来」的三步补进家页面，并让安装自检确认插件真的挂到了 profile。
+
+- **首次三步**：空库打开 `/home?view=today` 显示「把她接到你家」：先跟她说一句话 / 回来看今天 / 去她的房间；不伪造已有记忆。
+- **安装自检**：`tools/doctor.mjs` 新增 profile 挂载检查（扫描 `DSH_HOME/profiles/*/package.json` 的 `life-innovation` 依赖）；安装器结尾打印 `doctor --no-ports`，装完可直接自检。
+- **测试**：`tests/home.test.mjs` 增加空库首次三步断言；28 个测试文件 `TZ=UTC` 与 `npm run check` 通过。
+
 ## 0.5.0 — 2026-11-14
 
 把「家」从一块仪表盘变成四个只读的角落，并补上她整理记忆、拒绝/推迟的边界。
@@ -14,6 +22,7 @@
 - **安装自检**：新增 `tools/doctor.mjs`（Node/家目录/可写/数据库缺表/插件版本/DSH_HOME/60080·60081·8789），只读、给下一步；`package.json` 加 `doctor` 脚本。
 - **英文与演示**：新增 `README.en.md`（a cyber lifeform that lives in DSH）与 `docs/demo-60s.md` 演示脚本；中文 README 补 doctor 与四视角说明。
 - **测试**：新增 `tests/will.test.mjs`；更新 `tests/home.test.mjs` 覆盖四视角/房间/审计/只读；28 个测试文件，`TZ=UTC` 与 `npm run check` 通过。
+- **发布**：GitHub main/tag/Release 已发，live 已部署；npm 0.5.0 暂未发布（安全密钥 EOTP，用户选择稍后）。
 
 ## 0.4.3 — 2026-11-14
 
@@ -22,7 +31,7 @@
 - **`summarizeStructured`**：`lib/extract.js` 新增确定性结构化梗概，按决定 / 没放下 / 情绪 / 他说 / 你说分组，单句最多 64 字、整段 240 字；不调模型。
 - **`maybeSummarize`**：改用 `summarizeStructured`；仍保留原话 ref、水位与“最近 8 条不进梗概”的边界。
 - **测试**：`tests/summaries.test.mjs` 增加工具汇报过滤、决定/未完成/情绪分类和 240 字上限断言；27 个测试文件。
-- **发布**：本地 / GitHub 版本 0.4.3；npm 仍被安全密钥阻塞，未发布。
+- **发布**：GitHub 与 npm 0.4.3 均已发布；`dist-tags.latest=0.4.3`。
 
 ## 0.4.2 — 2026-11-14
 

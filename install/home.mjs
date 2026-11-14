@@ -231,6 +231,7 @@ export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = tr
     const current = row(db, 'SELECT phase, started_at, reason FROM life_phases WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1')
     const last = current || row(db, 'SELECT phase, started_at, reason FROM life_phases ORDER BY id DESC LIMIT 1')
     const rawToday = row(db, 'SELECT COUNT(*) AS c FROM raw_turns WHERE ts BETWEEN ? AND ?', [dayStart, dayEnd])
+    const firstRun = count(db, 'raw_turns') === 0 && count(db, 'raw_archive') === 0
     const hasSnapshots = Boolean(row(db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'self_snapshots'"))
     const snapshot = hasSnapshots
       ? row(db, 'SELECT id, date, text FROM self_snapshots WHERE date < ? ORDER BY date DESC LIMIT 1', [today])
@@ -272,6 +273,7 @@ export function collectHome({ home, dbPath, now = Date.now(), dreamLookback = tr
       conflicts: conflictRows(db),
       audit: rows(db, 'SELECT id, ts, action, ref, reason, actor FROM memory_audit ORDER BY id DESC LIMIT 8'),
       snapshot: snapshot || null,
+      firstRun,
       stats: {
         raw: count(db, 'raw_turns'),
         archived: count(db, 'raw_archive'),
@@ -713,6 +715,18 @@ function selfView(data) {
   ${snapshotBlock(data.snapshot)}`
 }
 
+function firstRunBlock() {
+  return `<section class="card first-run">
+    <div class="eyebrow">把她接到你家</div>
+    <h2>她刚住进来</h2>
+    <ol class="first-steps">
+      <li><b>先跟她说一句话</b><span>在 DSH 里随便聊一句，不用自我介绍。</span></li>
+      <li><b>回来看今天</b><span>刷新这一页，看她怎么过今天、做了什么。</span></li>
+      <li><b>去她的房间</b><span>便签、日记、书架都在那里；她记得的人与事在「她记得」。</span></li>
+    </ol>
+  </section>`
+}
+
 export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agentName = '', days = 1, memoryQuery = '', view = 'today' }) {
   const span = clampDays(days)
   const data = collectHome({ home, dbPath, now, memoryQuery })
@@ -769,6 +783,7 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
     ? `<section class="card"><h2>她还没有家</h2>
        <p class="empty">数据库还没建：${esc(data.error || '找不到记忆库')}。<br>等她第一次醒来、说上话，这里就会有东西。</p></section>`
     : `${viewTabs(activeView, span, memoryQuery)}
+      ${activeView === 'today' && data.firstRun ? firstRunBlock() : ''}
       ${activeView === 'today' ? `${reviewTabs(span)}${todaySection}${weekBlock(pastDays)}` : ''}
       ${activeView === 'memory' ? memoryView(data, span) : ''}
       ${activeView === 'room' ? roomBlock(home, data) : ''}
@@ -853,6 +868,12 @@ h3 { font-size:14px; font-weight:500; color:var(--muted); margin:28px 0 12px; le
 .actions code { color:var(--accent); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:11px; }
 .grid { display:grid; grid-template-columns:1.15fr .85fr; gap:18px; margin-top:18px; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:22px 24px; }
+.first-run { margin-bottom:18px; border-color:rgba(228,176,122,.32); background:linear-gradient(180deg, rgba(228,176,122,.08), rgba(255,255,255,.025)); }
+.first-run h2 { margin-top:2px; }
+.first-steps { margin:14px 0 0; padding-left:20px; display:grid; gap:10px; }
+.first-steps li { padding-left:2px; }
+.first-steps b { display:block; font-weight:500; }
+.first-steps span { display:block; color:var(--muted); font-size:13px; }
 .room-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:18px; }
 .room-list { display:grid; gap:10px; margin-top:12px; }
 .room-note { border-left:2px solid rgba(228,176,122,.35); padding:2px 0 2px 12px; }

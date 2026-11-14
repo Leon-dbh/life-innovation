@@ -543,4 +543,5 @@ Info "  或让守护进程拉起：HKCU Run\LifeInnovationService（登录时启
 Info "固定入口（书签用这个）：http://127.0.0.1:$EntryPort/"
 Info "  它 302 到这一次启动的带 token 地址；token 仍然由 dsh 自己校验。"
 Info "备份：$backupCmd（每天 03:30）"
+Info "自检：node `"$PluginPath\tools\doctor.mjs`" --home `"$DataHome`" --no-ports"
 if ($DryRun) { Write-Host "`n(dry-run：没有写任何文件、没有建任务)" -ForegroundColor Yellow }

@@ -67,6 +67,21 @@ function inspectDb(file) {
   }
 }
 
+function pluginProfiles(dshHome) {
+  const base = path.join(dshHome, 'profiles')
+  if (!fs.existsSync(base)) return []
+  const found = []
+  for (const name of fs.readdirSync(base)) {
+    const pkgPath = path.join(base, name, 'package.json')
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+      const spec = pkg.dependencies?.['life-innovation'] || pkg.devDependencies?.['life-innovation']
+      if (spec) found.push({ name, spec })
+    } catch { /* 不是可读 profile */ }
+  }
+  return found
+}
+
 /**
  * @param {{home?:string, dbPath?:string, checkPorts?:boolean, env?:object, now?:number}} [options]
  */
@@ -107,6 +122,10 @@ export async function runDoctor(options = {}) {
 
   const dshHome = env.DSH_HOME || path.join(process.env.USERPROFILE || process.env.HOME || '', '.dsh')
   add(dshHome && fs.existsSync(dshHome) ? 'ok' : 'warn', 'DSH_HOME', dshHome || '未设置', dshHome && fs.existsSync(dshHome) ? '' : '如果 DSH 装在别处，把 DSH_HOME 指过去，doctor 才能检查 profile。')
+  if (dshHome && fs.existsSync(dshHome)) {
+    const linked = pluginProfiles(dshHome)
+    add(linked.length ? 'ok' : 'warn', '插件挂载', linked.length ? linked.map((p) => `${p.name}: ${p.spec}`).join('；') : '没有 profile 挂载 life-innovation', linked.length ? '' : '重跑安装器，或手动执行 dsh plugin --profile <name> add <插件目录>。')
+  }
 
   if (options.checkPorts !== false) {
     const ports = [60080, 60081, 8789]

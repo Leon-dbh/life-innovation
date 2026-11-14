@@ -151,6 +151,19 @@ assert.match(renderHomeError('数据库被锁了'), /数据库被锁了/)
 assert.match(renderHomeError('<x>'), /&lt;x&gt;/)
 assert.equal(path.basename(dbPath), 'life-innovation.sqlite')
 
+// 新装好、还没说过话：today 给三步，不装作已经有过日子。
+const emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), 'jingjing-home-first-'))
+const emptyDb = homeFilePath(emptyHome)
+fs.mkdirSync(path.dirname(emptyDb), { recursive: true })
+const emptyStore = new MemoryStore(emptyDb)
+emptyStore.close()
+const first = renderHome({ home: emptyHome, dbPath: emptyDb, now })
+assert.match(first, /把她接到你家/)
+assert.match(first, /她刚住进来/)
+assert.match(first, /先跟她说一句话/)
+assert.match(first, /去她的房间/)
+fs.rmSync(emptyHome, { recursive: true, force: true })
+
 // 梦是「一天收起来之后」才生成的，第二天页面要退回去显示昨晚的梦。
 const tmp2 = fs.mkdtempSync(path.join(os.tmpdir(), 'jingjing-home-dream-'))
 const db2 = homeFilePath(tmp2)
@@ -178,4 +191,4 @@ assert.equal(readHomeDbHint(hintHome), '')
 fs.rmSync(hintHome, { recursive: true, force: true })
 
 fs.rmSync(tmp, { recursive: true, force: true })
-console.log('OK: 家（只读、证据、节律、事实去重、梦、XSS、缺库）')
+console.log('OK: 家（只读、证据、节律、事实去重、梦、首次三步、XSS、缺库）')
