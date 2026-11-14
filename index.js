@@ -16,6 +16,9 @@ import { buildMemoryContext } from './lib/context.js'
 import { syncDay, tick } from './lib/life.js'
 import { reconcileOnStart, syncPhase, tickRhythm, rhythmText } from './lib/rhythm.js'
 import { willText, currentWill } from './lib/will.js'
+import { createFocusState } from './lib/focus.js'
+import { Outbox } from './lib/outbox.js'
+import { readInitiativeConfig, createInitiativeTool, tickInitiative, sendViaBridge } from './lib/initiative.js'
 import { registerMemoryTools } from './lib/tools.js'
 import { createHands } from './lib/hands.js'
 import { resolvePaths } from './lib/paths.js'
@@ -111,8 +114,22 @@ export function apply(ctx, config = {}) {
     ctx.logger?.warn?.(`[life-innovation] 手没接上：${error?.message || error}`)
   }
 
-  // 四个只读工具（回忆/读全文/状态/日子）+ 六只手。
-  guarded('记忆工具', () => registerMemoryTools({ ctx, store, observe, hands }))
+  // 外发账本：主动开口即使只生成草稿，也要留下 pending 记录，不能把“写了”说成“发出去了”。
+  let outbox = null
+  let initiativeConfig = readInitiativeConfig({ config })
+  let initiativeTool = null
+  try {
+    outbox = new Outbox(store.db)
+    initiativeTool = createInitiativeTool({
+      store, outbox, config: initiativeConfig,
+      willCheck: ({ store: s, now, text }) => currentWill({ store: s, now, text }),
+    })
+  } catch (error) {
+    ctx.logger?.warn?.(`[life-innovation] 主动开口账本没接上：${error?.message || error}`)
+  }
+
+  // 四个只读工具（回忆/读全文/状态/日子）+ 六只手 + 主动开口。
+  guarded('记忆工具', () => registerMemoryTools({ ctx, store, observe, hands, initiative: initiativeTool }))
 
   // 家页面也挂在 DSH 自己的 webServer 上（同源），所以客户端按钮不用猜 60080：
   // 端口、token、反代全都跟着当前这个 DSH 走。
@@ -153,8 +170,15 @@ export function apply(ctx, config = {}) {
   const packCache = createPackCache({ store, maxChars, subject: SUBJECT })
 
   // 这一轮的话题。动态的「相关旧事」只接在静态记忆包后面，避免破坏前面的缓存。
-  let latestUserText = ''
-  let latestUserSession = ''
+  // 按 session 分开：A 窗口的最后一句话不能跑到 B 窗口的上下文和意愿里。
+  const focus = createFocusState()
+  const promptSessionId = (promptContext) => String(
+    promptContext?.agent?.session?.id || promptContext?.session?.id || '',
+  )
+  const promptUserText = (promptContext) => {
+    if (promptContext?.agent?.session?.header?.origin === 'subagent') return ''
+    return focus.get(promptSessionId(promptContext))
+  }
   guarded('记忆注入', () => ctx.systemPrompt.context({
     name: 'life:memory',
     order: 900,
@@ -176,10 +200,8 @@ export function apply(ctx, config = {}) {
     required: false,
     interpolate: false,
     text: (promptContext) => {
-      const agent = promptContext?.agent
-      if (agent?.session?.header?.origin === 'subagent') return ''
-      const sessionId = String(agent?.session?.id || promptContext?.session?.id || '')
-      const text = (!sessionId || !latestUserSession || sessionId === latestUserSession) ? latestUserText : ''
+      if (promptContext?.agent?.session?.header?.origin === 'subagent') return ''
+      const text = promptUserText(promptContext)
       if (!text) return ''
       try {
         return buildMemoryContext({ store, userText: text, now: Date.now(), budget: 900, subject: SUBJECT }).focusText
@@ -232,9 +254,10 @@ export function apply(ctx, config = {}) {
     order: 860,
     required: false,
     interpolate: false,
-    text: () => {
+    text: (promptContext) => {
+      if (promptContext?.agent?.session?.header?.origin === 'subagent') return ''
       try {
-        return willText({ store, now: Date.now(), text: latestUserText })
+        return willText({ store, now: Date.now(), text: promptUserText(promptContext) })
       } catch (error) {
         ctx.logger?.warn?.(`[life-innovation] 意愿文本失败：${error?.message || error}`)
         return ''
@@ -315,9 +338,11 @@ export function apply(ctx, config = {}) {
       const sessionId = String(session?.id || '')
 
       // 原话、断言、画像、日子块必须一起落：中途崩了不能留下「话记住了、事实没记住」。
+      let storedHuman = false
       store.transaction(() => {
         if (type === 'user/message') {
           if (!humanSource(message)) return
+          storedHuman = true
           store.addRaw(ts, sessionId, 'user', text)
           store.touchRelation(SUBJECT, ts)
           store.expirePlans(ts, SUBJECT)
@@ -338,9 +363,8 @@ export function apply(ctx, config = {}) {
         // 有人说话、或她刚回完，状态立刻切到醒着；其余状态由 60 秒 tick 推进。
         syncPhase({ store, now: ts })
       })
-      if (type === 'user/message') {
-        latestUserText = text
-        latestUserSession = sessionId
+      if (type === 'user/message' && storedHuman) {
+        focus.set(sessionId, text)
         try {
           const will = currentWill({ store, now: ts, text })
           if (will.decision !== 'allow') {
@@ -376,6 +400,20 @@ export function apply(ctx, config = {}) {
       const closedList = Array.isArray(rhythm.closed) ? rhythm.closed : (rhythm.closed?.closed || [])
       for (const c of closedList) ctx.logger?.info?.(`[life-innovation] 归档了 ${c.date}（${c.count} 件事）`)
       if (rhythm.dream) ctx.logger?.info?.(`[life-innovation] 做了个梦（非事实层）`)
+      if (outbox && initiativeConfig.enabled) {
+        try {
+          const initiative = await tickInitiative({
+            store, outbox, now, config: initiativeConfig,
+            willCheck: ({ store: s, now: t, text }) => currentWill({ store: s, now: t, text }),
+            sender: ({ entry, outbox: box, config: cfg }) => sendViaBridge({ outbox: box, entry, config: cfg }),
+          })
+          if (initiative.due) {
+            ctx.logger?.info?.(`[life-innovation] 主动开口：${initiative.reason}（${initiative.delivery?.state || 'pending'}）`)
+          }
+        } catch (error) {
+          ctx.logger?.warn?.(`[life-innovation] 主动开口失败：${error?.message || error}`)
+        }
+      }
       const done = tick({ store, now, dir: diaryDir })
       if (done) ctx.logger?.info?.(`[life-innovation] 写了日记 ${done.file}`)
     } catch (error) {

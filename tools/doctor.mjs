@@ -69,9 +69,15 @@ function inspectDb(file) {
 
 function pluginProfiles(dshHome) {
   const base = path.join(dshHome, 'profiles')
-  if (!fs.existsSync(base)) return []
+  let entries = []
+  try {
+    if (!fs.existsSync(base)) return []
+    entries = fs.readdirSync(base)
+  } catch {
+    return []
+  }
   const found = []
-  for (const name of fs.readdirSync(base)) {
+  for (const name of entries) {
     const pkgPath = path.join(base, name, 'package.json')
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))

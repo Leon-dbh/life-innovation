@@ -152,7 +152,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 - 解释：`memory_explain` 能回答「这条记忆从哪来、为什么被想起、有没有进记忆包」，并区分是常驻记忆包还是当轮的相关旧事；同一个说法的新旧版本一起列出；梗概和睡眠巩固也能用 `sum:<id>` / `self:<id>` 回读。`/home` 的「她的记忆」提供同样的只读视图。
 - 时间线：`memory_timeline` 把某一天的原话、动作、梦、书、日子章节和节律状态缝成一条只读时间线，每条带 ref。
 - 睡眠巩固：已经 `close_day` 收起来的日子，每天生成一条 `self_snapshots`；只从真实记录里取，不调模型、不编造；重复 tick 不会重复写。
-- 分层回忆：`summaries` 保留 `source_refs`（可回读的原话）；较早的原话先按「决定 / 没放下 / 情绪 / 他说 / 你说」做 240 字结构化梗概，工具汇报和长日志不进去；检索以 bigram + IDF 为主，SQLite FTS5 trigram 为长词补充；双字中文仍走原来的 bigram/LIKE。候选池会按每个词各取一小批，不让最近的高频词把很久以前的稀有旧事挤出召回。
+- 分层回忆：`summaries` 保留 `source_refs`（可回读的原话）；较早的原话先按「决定 / 没放下 / 情绪 / 他说 / 你说」做 240 字结构化梗概，工具汇报和长日志不进去；检索以 bigram + IDF 为主，SQLite FTS5 trigram 为长词补充；0.6.0 加了少量可解释的词面归一（“她”按对话里的“你”处理，工作单位↔上班、城市↔住、检查↔复查）。真实 50 问的 `recall@3` 从 64% 到 80%，完整上下文覆盖从 82% 到 92%；仍不默认 embedding，也不把全部原话常驻。
 - 抽取：确定性规则（名字/城市/工作/年龄/生日/养了什么/好恶/计划），不为此调模型；同一件事有了新说法，旧说法会被 `superseded_by` 取代。
 - 不做的事：不按会话隔离（换窗口她仍是她）、不导入旧项目的库、不写「你是一个」。
 
@@ -211,9 +211,9 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 - **把梦记下来**：第二天她可以用 `note_write` 带 `dream_date` 把昨晚的梦写成 `notes/<date>-dream.md`；一个梦只能记一张，正文标「梦不是真事」。是否记由她决定，提示只在「昨晚的梦还没记」时出现一次。
 - 状态注入在 `life:rhythm`（order 850），名字注入在 `life:name`（order 810）。
 
-## 她能做到的二十件事
+## 她能做到的二十一件事
 
-除了说话，她有二十个工具：八个记忆/生活回读与整理工具，十二只有边界的手；全部有额度、落动作账本：
+除了说话，她有二十一个工具：八个记忆/生活回读与整理工具，十二只有边界的手，一个默认关的主动开口；全部有额度、落动作账本：
 
 | 工具 | 用途 | 边界 |
 | --- | --- | --- |
@@ -230,6 +230,7 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 | `web_read` | 打开一个 https 网页读正文 | 每天 5 次；拒绝本机/内网（DNS 解析后逐地址判断）；只读、不限站点；正文最多 4000 字；图片/PDF 不读 |
 | `plugin_search` | 在 GitHub 找 DSH 插件 | 每天 5 次、最多 5 条；只读 `api.github.com`；只找不装 |
 | `notify` | 弹一条 Windows 通知 | 每天 1 次、120 字；仅交互式桌面会话 |
+| `life_initiative` | 看主动开口该不该发生、为什么没发生；也可一键停/恢复 | 默认关；`status/check` 只判断；`stop` 免确认；`resume` 必须 `confirm=RESUME`；发送只认桥接 `2xx + {ok:true}` |
 
 安静下来时，tick 按「读一段本地书 → 翻昨天的日记 → 翻记忆」的顺序做一件真事，记进 `actions`。
 
@@ -243,9 +244,12 @@ node tools/import.mjs --from <导出目录> --db <新机器>/state/life-innovati
 
 ## 主动开口
 
-- preset 挂 `@deepseek-ai/dsh-tool-schedule`，她可自己定闹钟（`schedule_create/list/update/delete`）。
-- 到点由 Host 投递一条 `source.kind='schedule'` 的消息唤醒她；任务与投递记录在 `$DSH_HOME/storages/schedule.json`，重启不丢，过期只补最近一次。
-- **默认不主动外发**：安静时的 `quietAction` 只写便签/翻书/记账，不发消息；`notify` 也只在被明确调用时弹一条本机通知。0.5.0 没有“到点自己找他”的默认路径。
+- **默认关**：`config.initiative.enabled` 不写就是 `false`；`life_initiative` 只回答状态，不会自己发消息。
+- 开启后也先过策略：要有由头（未完成计划 / 正在读的书 / 昨晚的梦 / 很久没说话），且不在静默时段、今天没超量、离上次够久、没有连续未回应、意愿层不拒绝。
+- 发送走桥接 `/send`；只认 `2xx + {ok:true}`。没配桥接就只留 `pending` 草稿，没有确认一律 `uncertain`，不把“写了”说成“发出去了”。
+- `life_initiative(action='stop')` 一键停；`resume` 必须写 `confirm='RESUME'`。每次判断/发送都落 `actions` 和 outbox，可审计。
+- preset 仍挂 `@deepseek-ai/dsh-tool-schedule`，她可以自己定闹钟；这与主动外发是两条路，闹钟不会自动变成微信消息。
+- 0.5.0 的安静动作仍只写便签/翻书/记账，不发消息。
 
 ## 外发账本（未接渠道）
 
@@ -285,10 +289,10 @@ powershell -ExecutionPolicy Bypass -File install\install.ps1 -StartService
 ## 打包与离线安装
 
 ```powershell
-npm pack     # 得到 life-innovation-0.5.1.tgz
+npm pack     # 得到 life-innovation-0.6.1.tgz
 
 # 在另一台机器上（先建好 profile，或跑 install.ps1 -SkipPluginAdd）
-dsh plugin --profile life-innovation add D:\path\life-innovation-0.5.1.tgz
+dsh plugin --profile life-innovation add D:\path\life-innovation-0.6.1.tgz
 ```
 
 - 离线包装的是同一份代码（`index.js`、`client.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`、`locale/`）。
@@ -306,8 +310,8 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.5.1.tgz
 ## 测试
 
 ```powershell
-npm test          # 28 个测试文件
+npm test          # 31 个测试文件
 npm run check     # 语法检查
 ```
 
-覆盖：抽取/落库/画像/取代、生活线聚合/证据/空档/日记/tick、备份/导入/导出/合并、生命周期/归档/回收站/显式遗忘与恢复/审计、节律/归档/梦、书的搜索/打开/导入与进度、自我叙事/记忆解释/家页面四视角、意愿层（安全底线/低电量/社交电量）、手的边界与额度、提示词策略（只给事实，不写人设）、工具 schema、家的只读与转义。
+覆盖：抽取/落库/画像/取代、生活线聚合/证据/空档/日记/tick、备份/导入/导出/合并、生命周期/归档/回收站/显式遗忘与恢复/审计、节律/归档/梦、书的搜索/打开/导入与进度、自我叙事/记忆解释/家页面四视角、意愿层（安全底线/低电量/社交电量）、手的边界与额度、提示词策略（只给事实，不写人设）、工具 schema、家的只读与转义，以及回收/恢复事务、归档相邻回答、会话隔离、大文件前缀读取等审查回归。

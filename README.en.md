@@ -7,7 +7,7 @@ She has her own days: conversations, actions, a timeline, a diary, dreams, books
 ## What she is
 
 - **A life, not a prompt.** Raw turns and real tool actions become `life_blocks`; a day is aggregated from what actually happened, not from a role-play script.
-- **Memory with evidence.** `raw_turns → summaries → assertions → profiles + relations`. Every claim in the injected memory pack carries a ref such as `raw:58`, `act:7`, `life:3`, `dream:2`, or `self:1`. If it is not written down, she does not pretend to remember it.
+- **Memory with evidence.** `raw_turns → summaries → assertions → profiles + relations`. Every claim in the injected memory pack carries a ref such as `raw:58`, `act:7`, `life:3`, `dream:2`, or `self:1`. If it is not written down, she does not pretend to remember it. In a real 50-question set, lexical recall@3 reached 80% and full context coverage 92%, without embeddings or dumping all raw turns into the prompt.
 - **A room.** `/home` has four read-only views: `today`, `memory`, `room`, and `self`. No web write path, no model call, no speaking for her.
 - **A will.** `lib/will.js` lets her defer or refuse *non-safety* requests when she is tired, has unfinished work, or has been talking too long. Safety, emergency, privacy, and platform limits always win; she may not disguise a system limit as her own refusal.
 - **Books.** Public-domain books from Project Gutenberg, plus local EPUB/TXT import. No pirate sites, no DRM circumvention, no PDF.
@@ -42,9 +42,14 @@ The page reads the same SQLite database through a read-only connection. It does 
 
 `memory_forget` is dry-run by default. It previews what would be lost and which parts of her life reference it. To execute, `confirm` must be exactly the same string as `ref`. The entry goes to the recycle bin; the payload is not deleted. `memory_restore` brings it back by recycle id. Both actions write `memory_audit`.
 
+## Proactive messages (off by default)
+
+`life_initiative` is a deliberate, auditable channel, not a timer that sends messages. It is disabled unless `config.initiative.enabled` is true. Even then it needs a reason (an open plan, a book in progress, last night's dream, or a long silence), must be outside quiet hours, under the daily cap, past the minimum gap, and not already waiting on two unanswered messages. Delivery only counts as sent on `2xx + {ok:true}`; without a bridge it stays `pending`, and without confirmation it is `uncertain`. `stop` needs no confirmation; `resume` requires `confirm='RESUME'`.
+
 ## Boundaries
 
 - No automatic outbound messages by default. Quiet actions only write notes, read books, or record actions.
+- Proactive messages are opt-in and rate-limited; safety and privacy still win.
 - No persona pack, no dating simulation, no “always agreeable” mode.
 - No silent deletion; no admin “delete the database” button.
 - Safety and privacy cannot be overridden by the will layer.

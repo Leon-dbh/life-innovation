@@ -2,6 +2,41 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.6.1 — 2026-11-14
+
+0.6.0 的审查修复版。只修确认的行为问题，不扩大主动开口范围，不发外发消息。
+
+- **主动开口补发**：无桥接时留下的 pending，在配置桥接后会补发同一条，不再被 `pending` 永久卡住；补发前重新检查静默时段与当下意愿，用户已回话或超过 24 小时的旧草稿标为 `failed`（`user_replied` / `expired`），不追着发。
+- **状态一致**：`life_initiative status/check/resume` 与 60 秒 tick 共用同一 `willCheck`，意愿层拒绝时不再误报 `due`；`stop` 和缺确认的 `resume` 返回真实 `last_in/today_count/unanswered/pending`。
+- **发送与审计**：`sendViaBridge` 使用草稿自己的 `target`，发送后以 outbox 账本状态为准；补发审计使用带时间的 callId，避免被 UNIQUE 静默吞掉。
+- **由头与空档**：已读完的书不再作为“正在读”的由头；`book` 文案按 0 / 进度 / 读完区分；`missing_you` 带真实 `raw:<id>` ref。
+- **上下文与召回**：context 的 section 预算改为跳过放不下的 section 而不是提前结束；长问句的同义词不再被 16 词上限挤掉。
+- **家页面**：`roomFiles` 的 `statSync` 加保护，坏链接/刚删除的文件不再让整个家页面失败。
+- **测试**：新增 `tests/search.test.mjs`；`tests/initiative.test.mjs` 补 pending 补发/静默/过期/ref/stop 状态/book 进度；31 个测试文件 `npm test`、`TZ=UTC npm test`、`npm run check`、`git diff --check` 通过。真实 50 问仍为 `recall@3=0.80`、`contextCoverage=0.92`、`promptCoverage=0.90`。
+
+## 0.6.0 — 2026-11-14
+
+三件事一起做：把 0.5.2 部署到 live、补上默认关的主动开口、把真实 50 问的召回从“能搜到”推到“答得上”。仍然不默认调用模型，不做全量原话注入。
+
+- **live 0.5.2**：把 0.5.2 的 `home.mjs` 部署到 `D:\jingjing-home\service` 并重启 60080；四视角均 200，`doctor` 全绿；在 live 库的只读副本上验证 `memory_forget` → `memory_restore` 与审计，未写入真实库。
+- **主动开口**：新增 `lib/initiative.js` 与第 21 个工具 `life_initiative`。默认关；即使开启，也要有由头（未完成计划 / 正在读的书 / 昨晚的梦 / 很久没说话）、过静默、过频率与连续未回应检查；发送只认桥接 `2xx + {ok:true}`，没有确认只记 `pending/uncertain`，不伪造 `sent`；`stop` 免确认，`resume` 需要 `confirm=RESUME`。
+- **召回第二轮**：`lib/search.js` 加“她→你”问法归一、少量内容单字和可解释词面归一（工作单位↔上班、城市↔住、检查↔复查、机器人↔电脑/程序）；`lib/context.js` 的近期窗口从 12 条扩到 30 条候选、最多 12 条进上下文，相关旧事最多 7 条。真实 50 问：`recall@3` 64% → **80%**，`contextCoverage` 82% → **92%**，`promptCoverage` 90%，p95 2.72ms。
+- **测试**：新增 `tests/initiative.test.mjs`；30 个测试文件通过；`npm run check` 通过。
+- **默认边界**：live 当前仍未开启主动外发；npm/GitHub 本轮不发布。
+
+## 0.5.2 — 2026-11-14
+
+严格审查后的修复版。只修确认的行为问题，不改生活线/记忆模型，不发 npm/GitHub。
+
+- **回收与恢复**：`recycleRaw` 返回回收站 id，并在同一事务里精确摘除 `summaries.source_refs` 的悬空 `raw:N`；`recycleRestore` 校验 id/payload 并把插入、删除、审计包进事务；`memory_forget` 不再猜最新回收站编号。
+- **影响面**：`memoryRefEffects` 改为完整 token + JSON 数组精确匹配，`raw:1` 不再误命中 `raw:10`。
+- **上下文**：`rawAfter` 跨 `raw_turns`/`raw_archive`；命中他的提问后跳过连续 user/工具汇报找她的回复；预算裁剪长行时继续试后面的短行，refs 与 lines 对齐；没有内容时不再返回只有标题的假上下文。
+- **多会话**：新增 `lib/focus.js`，按 session 存最后一句话（LRU 200）；`life:recall`/`life:will` 只读当前会话，子智能体跳过；非人类消息不再更新 focus 或写 `will_decision`。
+- **意愿**：明确决定/承诺/没做完的事移到夜里/低电量/社交电量检查之前，仍不覆盖安全底线。
+- **家页面**：`roomFiles` 先排序取前 N 个再读 64KB 前缀；记忆搜索转义 `%/_`；冲突按 `subject + predicate` 分组；doctor 的 profile 目录读取加保护。
+- **测试**：新增 `tests/review5.test.mjs`，补 tools/home/will 回归；29 个测试文件 `TZ=UTC` 全绿，`npm run check` 通过。
+- **状态**：本地版本 `0.5.2`，暂不发布。
+
 ## 0.5.1 — 2026-11-14
 
 把「刚住进来」的三步补进家页面，并让安装自检确认插件真的挂到了 profile。

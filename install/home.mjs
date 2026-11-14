@@ -141,27 +141,33 @@ function factLine(fact) {
 function memoryHits(db, query, limit = 12) {
   const q = String(query || '').trim()
   if (!q) return []
-  const like = `%${q}%`
-  return rows(db, `SELECT id, ts, role, text, 0 AS archived FROM raw_turns WHERE text LIKE ?
+  // LIKE 里的 %/_ 是通配符；她搜“%”时不该把整库都倒出来。
+  const escaped = q.replace(/[!%_]/g, '!$&')
+  const like = `%${escaped}%`
+  return rows(db, `SELECT id, ts, role, text, 0 AS archived FROM raw_turns WHERE text LIKE ? ESCAPE '!'
     UNION ALL
-    SELECT id, ts, role, text, 1 AS archived FROM raw_archive WHERE text LIKE ?
+    SELECT id, ts, role, text, 1 AS archived FROM raw_archive WHERE text LIKE ? ESCAPE '!'
     ORDER BY ts DESC LIMIT ?`, [like, like, Math.trunc(limit)])
 }
 
 function conflictRows(db) {
-  const all = rows(db, 'SELECT id, predicate, value, valid_from, valid_to FROM assertions ORDER BY predicate, id')
+  const all = rows(db, 'SELECT id, subject, predicate, value, valid_from, valid_to FROM assertions ORDER BY subject, predicate, id')
   const groups = new Map()
   for (const r of all) {
-    if (!groups.has(r.predicate)) groups.set(r.predicate, [])
-    groups.get(r.predicate).push(r)
+    const key = `${r.subject || ''}\u0000${r.predicate}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(r)
   }
   const out = []
-  for (const [predicate, list] of groups) {
+  for (const list of groups.values()) {
+    const predicate = list[0].predicate
+    const subject = list[0].subject || ''
     const values = [...new Set(list.map((r) => String(r.value)))]
     if (values.length < 2) continue
     const live = list.filter((r) => r.valid_to === null)
     const current = live[live.length - 1] || list[list.length - 1]
     out.push({
+      subject,
       predicate,
       current: current.value,
       current_ref: `assert:${current.id}`,
@@ -434,7 +440,7 @@ function memorySection(data, span) {
   const conflicts = data.conflicts.length
     ? `<div class="memory-conflicts"><h3>她改过口的事（旧说法没有删）</h3><ul>${data.conflicts.map((c) => {
       const old = c.previous.map((p) => `「${esc(p.value)}」 ${esc(p.when)}（${esc(p.ref)}）`).join('；')
-      return `<li><strong>${esc(c.predicate)}</strong>：现在是「${esc(c.current)}」（${esc(c.current_ref)}）${old ? `；以前说过 ${old}` : ''}</li>`
+      return `<li><strong>${esc(c.subject ? `${c.subject} · ${c.predicate}` : c.predicate)}</strong>：现在是「${esc(c.current)}」（${esc(c.current_ref)}）${old ? `；以前说过 ${old}` : ''}</li>`
     }).join('')}</ul></div>`
     : ''
   let hits = ''
@@ -604,18 +610,38 @@ function weekBlock(days) {
   </section>`
 }
 
-function roomFiles(home, sub, limit = 6) {
+export function roomFiles(home, sub, limit = 6, maxBytes = 64 * 1024) {
   const dir = path.join(home, sub)
   try {
-    return fs.readdirSync(dir, { withFileTypes: true })
+    // 先 stat 排序、截前 N 个，再读；不能先把整个目录里的每个文件读进内存。
+    const picked = fs.readdirSync(dir, { withFileTypes: true })
       .filter((e) => e.isFile() && !e.name.startsWith('.') && /\.(md|txt)$/i.test(e.name))
       .map((e) => {
         const file = path.join(dir, e.name)
-        const stat = fs.statSync(file)
-        return { name: e.name, mtime: stat.mtimeMs, text: fs.readFileSync(file, 'utf8') }
+        try {
+          const stat = fs.statSync(file)
+          return { name: e.name, mtime: stat.mtimeMs, file }
+        } catch {
+          // 文件可能刚被删掉/是坏链接；一个坏文件不该让整个家 503。
+          return null
+        }
       })
+      .filter(Boolean)
       .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, limit)
+      .slice(0, Math.max(0, Math.trunc(limit)))
+
+    const cap = Math.max(1024, Math.trunc(Number(maxBytes) || 64 * 1024))
+    return picked.map((entry) => {
+      const buffer = Buffer.allocUnsafe(cap)
+      const fd = fs.openSync(entry.file, 'r')
+      let size = 0
+      try {
+        size = fs.readSync(fd, buffer, 0, cap, 0)
+      } finally {
+        fs.closeSync(fd)
+      }
+      return { name: entry.name, mtime: entry.mtime, text: buffer.subarray(0, size).toString('utf8') }
+    })
   } catch {
     return []
   }

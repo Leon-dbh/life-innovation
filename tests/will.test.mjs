@@ -37,6 +37,11 @@ assert.equal(ok.decision, 'allow')
 const durable = assessWill({ phase: 'quiet', energy: 0.5, openLoops: 2, social: 0, text: '我答应你明天去医院' })
 assert.equal(durable.decision, 'allow')
 
+// 承诺优先于夜里低电量/社交电量：不能因为累或刚聊过很多就把答应的事推掉。
+const durableAtNight = assessWill({ phase: 'night', energy: 0.1, social: 15, openLoops: 2, text: '我答应你明天去医院' })
+assert.equal(durableAtNight.decision, 'allow')
+assert.match(durableAtNight.reason, /认真接住|需要认真/)
+
 // 提示词只给基调，不暴露分数；安全底线写死。
 const text = willText({ now: Date.now(), text: '我有点难受' })
 assert.match(text, /安全|急救|隐私|额度/)

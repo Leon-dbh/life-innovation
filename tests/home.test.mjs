@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { MemoryStore } from '../lib/store.js'
-import { renderHome, renderHomeError, homeFilePath, homeDbHintFile, readHomeDbHint } from '../install/home.mjs'
+import { renderHome, renderHomeError, homeFilePath, homeDbHintFile, readHomeDbHint, roomFiles } from '../install/home.mjs'
 
 const TZ = 'Asia/Shanghai'
 const now = Date.parse('2026-11-05T23:20:00+08:00')
@@ -60,14 +60,28 @@ store.addDream({ date: pastDay, ts: pastAt + 60000, text: '梦见旧书里夹着
 
 store.touchRelation('他', at(18, 29))
 store.setProfile('他', '名字', '林晚', 'raw:1', at(18, 29))
+// 同一条 predicate 属于不同的人时不能混成一场“改口”。
+store.addAssertion({ ts: at(18, 33), subject: '她', predicate: '工作', value: '学生', source: 'raw:1' })
+store.addAssertion({ ts: at(18, 34), subject: '她', predicate: '工作', value: '研究员', source: 'raw:1' })
 store.close()
+
+// 正文里带百分号的原话：搜索“%”只能命中它，不能被 LIKE 当成通配符倒出整库。
+const sqlite = new MemoryStore(dbPath)
+sqlite.addRaw(at(18, 40), 's1', 'user', '今天走了 100% 的路，脚有点酸。')
+sqlite.close()
 
 const html = renderHome({ home, dbPath, now, chatUrl: 'http://127.0.0.1:60080/' })
 fs.mkdirSync(path.join(home, 'notes'), { recursive: true })
 fs.writeFileSync(path.join(home, 'notes', '喝水.md'), '今天记得喝水。', 'utf8')
+fs.writeFileSync(path.join(home, 'notes', '大文件.md'), `开头\n${'x'.repeat(5000)}\n结尾`, 'utf8')
 const memory = renderHome({ home, dbPath, now, view: 'memory' })
 const room = renderHome({ home, dbPath, now, view: 'room' })
 const selfPage = renderHome({ home, dbPath, now, view: 'self' })
+const limited = roomFiles(home, 'notes', 6, 1024)
+assert.ok(limited.every((f) => f.text.length <= 1024), '房间只读前缀，不把整本大文件读进来')
+const big = limited.find((f) => f.name === '大文件.md')
+assert.ok(big, '大文件仍应出现在房间列表里')
+assert.ok(!big.text.includes('结尾'), '超过上限的尾部不应被读进来')
 assert.match(html, /<title>家<\/title>/)
 const named = renderHome({ home: tmp, dbPath, now, agentName: '鲸鲸' })
 assert.match(named, /<title>鲸鲸的家<\/title>/)
@@ -88,6 +102,8 @@ assert.match(memory, /她的记忆 · 只读/)
 assert.match(memory, /你梦见过的（不是真事）/)
 assert.match(memory, /她改过口的事/)
 assert.match(memory, /以前说过/)
+assert.match(memory, /她 · 工作/, '不同人的同一 predicate 要分开显示')
+assert.match(memory, /他 · 工作/)
 assert.match(html, /梦 · 不是真事/)
 assert.match(html, /今天的梦/)
 assert.match(html, /梦见一把伞/)
@@ -124,6 +140,11 @@ const searched = renderHome({ home, dbPath, now, view: 'memory', memoryQuery: '�
 assert.match(searched, /搜「林晚」找到的原话/)
 assert.match(searched, /我叫林晚/)
 assert.match(searched, /raw:1/)
+const wildcard = renderHome({ home, dbPath, now, view: 'memory', memoryQuery: '%' })
+assert.match(wildcard, /今天走了 100% 的路/)
+const wildcardHits = (wildcard.split('搜「%」找到的原话')[1] || '').split('</ul>')[0]
+assert.ok(wildcardHits.includes('100% 的路'), '百分号应作为普通字符命中')
+assert.ok(!wildcardHits.includes('我叫林晚'), 'LIKE 的 % 必须被转义，不能匹配整库')
 const xssSearch = renderHome({ home, dbPath, now, view: 'memory', memoryQuery: '<script>alert(9)</script>' })
 assert.doesNotMatch(xssSearch, /<script>alert\(9\)/)
 
