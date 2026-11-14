@@ -8,6 +8,7 @@ import { rankedRecall } from '../lib/search.js'
 import { tick, dateKey, startOfDay } from '../lib/life.js'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jingjing-review-'))
+process.on('exit', () => fs.rmSync(dir, { recursive: true, force: true }))
 const db = (name) => path.join(dir, name)
 const DAY = 86400000
 const now = Date.now()

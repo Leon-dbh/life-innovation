@@ -296,7 +296,7 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.6.1.tgz
 ```
 
 - 离线包装的是同一份代码（`index.js`、`client.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`、`locale/`）。
-- `npm publish`：包名 `life-innovation` 已发布，登录后用 `npm publish` 发新版本。
+- npm：包名 `life-innovation` 已存在，但 npm 上最新仍是 0.4.3；0.5.0 之后的版本目前只走 GitHub Release。只有明确要发 npm 时才手动 `npm publish`，本仓库的发布 workflow 不会自动发 npm。
 - GitHub Release 里附 `.tgz`，别人不装 Node 工具链也能下载。
 
 ## 0.2.0 的破坏性改名
@@ -310,8 +310,9 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.6.1.tgz
 ## 测试
 
 ```powershell
-npm test          # 31 个测试文件
+npm test          # 31 个测试文件，逐个跑并汇总
 npm run check     # 语法检查
+npm run smoke     # 打包 → 临时 consumer 安装 → import
 ```
 
 覆盖：抽取/落库/画像/取代、生活线聚合/证据/空档/日记/tick、备份/导入/导出/合并、生命周期/归档/回收站/显式遗忘与恢复/审计、节律/归档/梦、书的搜索/打开/导入与进度、自我叙事/记忆解释/家页面四视角、意愿层（安全底线/低电量/社交电量）、手的边界与额度、提示词策略（只给事实，不写人设）、工具 schema、家的只读与转义，以及回收/恢复事务、归档相邻回答、会话隔离、大文件前缀读取等审查回归。

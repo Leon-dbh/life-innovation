@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TZ: UTC
+
 jobs:
   test:
     strategy:
@@ -13,6 +23,7 @@ jobs:
         os: [windows-latest, ubuntu-latest]
         node: [22, 24]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,3 +33,9 @@ jobs:
         run: npm run check
       - name: unit tests
         run: npm test
+      - name: package smoke
+        run: npm run smoke
+      - name: PowerShell BOM/parser check
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tools/check-powershell.ps1

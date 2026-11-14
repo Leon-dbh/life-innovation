@@ -1,0 +1,84 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Optional version to verify against package.json (for example 0.6.2)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  TZ: UTC
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: node syntax check
+        run: npm run check
+      - name: unit tests
+        run: npm test
+      - name: package smoke
+        run: npm run smoke
+      - name: resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          node -e '
+            const fs = require("node:fs")
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"))
+            const input = (process.env.INPUT_VERSION || "").trim()
+            if (input && input !== pkg.version) {
+              console.error(`input version ${input} does not match package.json ${pkg.version}`)
+              process.exit(1)
+            }
+            if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.version)) {
+              console.error(`invalid package version ${pkg.version}`)
+              process.exit(1)
+            }
+            console.log(`version=${pkg.version}`)
+            console.log(`tag=v${pkg.version}`)
+          ' >> "$GITHUB_OUTPUT"
+      - name: verify tag is new
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "tag $TAG already exists; bump package.json first"
+            exit 1
+          fi
+      - name: build tarball and notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          npm pack --pack-destination dist
+          node scripts/release-notes.mjs "$VERSION" > dist/release-notes.md
+          test -s dist/release-notes.md
+      - name: publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" dist/*.tgz \
+            --title "$TAG" \
+            --notes-file dist/release-notes.md \
+            --target "$GITHUB_SHA"
+          gh release view "$TAG" --json url,assets --jq '{url, assets: [.assets[] | {name, size, digest}]}'

@@ -2,6 +2,15 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## Unreleased — 工程卫生
+
+- **发布线归一**：把分叉的本地历史归档为 `archive/local-0.6.1`（`740e562`），本地 28 个 tag 归档为 `archive/local-*`；删除冲突 tag 后重新拉取远端 canonical tags，本地 `main` 对齐远端 `5ec72d3`。之后只以远端历史为发布线，不再在分叉上提交。
+- **测试**：`npm test` 改用 `tools/test-runner.mjs`，逐个跑 `tests/*.test.mjs`，单文件 120s 超时，失败后继续跑完并汇总；`tests/review-fixes.test.mjs` 在退出时清理临时目录。
+- **包 smoke**：新增 `tools/package-smoke.mjs`，`npm pack` 后在临时 consumer 安装并 `import('life-innovation')`，校验版本与 `apply/inject` 导出。
+- **CI**：测试矩阵增加 `permissions: contents: read`、超时、并发取消、`TZ=UTC`；新增 package smoke 和 Windows PowerShell BOM/parser 检查。
+- **发布**：新增手动 `release` workflow，重跑 check/test/smoke 后打包、从 CHANGELOG 生成 notes、创建 tag + GitHub Release 并上传 tarball；不自动 `npm publish`。
+- **仓库卫生**：新增 `package-lock.json`、`SECURITY.md`、`CONTRIBUTING.md`、`.editorconfig`、issue 模板；`.gitignore` 加 `dist/`；22 个历史 `.tgz` 移出仓库；README 明确 npm 最新仍是 0.4.3，0.5.0 之后只走 GitHub Release。
+
 ## 0.6.1 — 2026-11-14
 
 0.6.0 的审查修复版。只修确认的行为问题，不扩大主动开口范围，不发外发消息。
