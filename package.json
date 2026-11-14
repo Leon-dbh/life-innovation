@@ -1,6 +1,6 @@
 {
   "name": "life-innovation",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": false,
   "type": "module",
   "description": "给一个住在 DSH 里的赛博生命体：记忆、真实生活线与只读的家；名字由使用者决定",

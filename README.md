@@ -289,10 +289,10 @@ powershell -ExecutionPolicy Bypass -File install\install.ps1 -StartService
 ## 打包与离线安装
 
 ```powershell
-npm pack     # 得到 life-innovation-0.6.1.tgz
+npm pack     # 得到 life-innovation-0.6.2.tgz
 
 # 在另一台机器上（先建好 profile，或跑 install.ps1 -SkipPluginAdd）
-dsh plugin --profile life-innovation add D:\path\life-innovation-0.6.1.tgz
+dsh plugin --profile life-innovation add D:\path\life-innovation-0.6.2.tgz
 ```
 
 - 离线包装的是同一份代码（`index.js`、`client.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`、`locale/`）。

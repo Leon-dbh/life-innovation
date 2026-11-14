@@ -2,7 +2,9 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
-## Unreleased — 工程卫生
+## 0.6.2 — 2026-11-14
+
+工程卫生版：不改变运行时导出和记忆行为，只收紧发布、测试与仓库流程。
 
 - **发布线归一**：把分叉的本地历史归档为 `archive/local-0.6.1`（`740e562`），本地 28 个 tag 归档为 `archive/local-*`；删除冲突 tag 后重新拉取远端 canonical tags，本地 `main` 对齐远端 `5ec72d3`。之后只以远端历史为发布线，不再在分叉上提交。
 - **测试**：`npm test` 改用 `tools/test-runner.mjs`，逐个跑 `tests/*.test.mjs`，单文件 120s 超时，失败后继续跑完并汇总；`tests/review-fixes.test.mjs` 在退出时清理临时目录。
