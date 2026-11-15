@@ -25,35 +25,27 @@ const WIKI = {
 }
 
 const fetched = []
+const reply = (url, body, type) => ({
+  ok: true,
+  status: 200,
+  url,
+  headers: { get: (name) => (String(name).toLowerCase() === 'content-type' ? type : null) },
+  arrayBuffer: async () => Buffer.from(body),
+})
 const fetchImpl = async (url) => {
   fetched.push(url)
-  if (url.includes('gutenberg.org')) {
-    return { ok: true, status: 200, url, arrayBuffer: async () => Buffer.from(BOOK_TEXT) }
-  }
-  if (url.includes('wikipedia.org')) {
-    return { ok: true, status: 200, url, arrayBuffer: async () => Buffer.from(JSON.stringify(WIKI)) }
-  }
+  if (url.includes('gutenberg.org')) return reply(url, BOOK_TEXT, 'text/plain; charset=utf-8')
+  if (url.includes('wikipedia.org')) return reply(url, JSON.stringify(WIKI), 'application/json')
   if (url.includes('example.com')) {
-    return {
-      ok: true,
-      status: 200,
-      url,
-      arrayBuffer: async () => Buffer.from('<html><head><title>示例页</title><script>bad()</script></head><body><p>这是网页的正文，足够长，可以被读出来。</p></body></html>'),
-    }
+    return reply(url, '<html><head><title>示例页</title><script>bad()</script></head><body><p>这是网页的正文，足够长，可以被读出来。</p></body></html>', 'text/html; charset=utf-8')
   }
   if (url.includes('bing.com')) {
-    return {
-      ok: true, status: 200, url,
-      arrayBuffer: async () => Buffer.from(`<rss><channel><item><title>西湖</title><link>https://example.com/xihu</link><description>杭州的湖</description></item></channel></rss>`),
-    }
+    return reply(url, `<rss><channel><item><title>西湖</title><link>https://example.com/xihu</link><description>杭州的湖</description></item></channel></rss>`, 'application/xml')
   }
   if (url.includes('api.github.com')) {
-    return {
-      ok: true, status: 200, url,
-      arrayBuffer: async () => Buffer.from(JSON.stringify({ items: [
-        { full_name: 'someone/dsh-memory', html_url: 'https://github.com/someone/dsh-memory', description: '记忆插件', stargazers_count: 12, updated_at: '2026-11-07T00:00:00Z' },
-      ] })),
-    }
+    return reply(url, JSON.stringify({ items: [
+      { full_name: 'someone/dsh-memory', html_url: 'https://github.com/someone/dsh-memory', description: '记忆插件', stargazers_count: 12, updated_at: '2026-11-07T00:00:00Z' },
+    ] }), 'application/json')
   }
   throw new Error(`unexpected url ${url}`)
 }

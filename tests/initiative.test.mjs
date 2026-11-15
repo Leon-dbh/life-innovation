@@ -343,7 +343,7 @@ const base = {
   const s = setup()
   s.store.addRaw(at(1), 's1', 'user', '早')
   const tool = createInitiativeTool({
-    ...s, config: base,
+    ...s, config: base, now: () => at(10),
     willCheck: () => ({ decision: 'refuse', reason: '测试拒绝' }),
   })
   const status = await tool.execute({ action: 'status' })
@@ -359,7 +359,7 @@ const base = {
   s.store.addRaw(at(1), 's1', 'user', '早')
   const pending = s.outbox.create({ channel: 'wechat', target: 'chat-1', text: '草稿', now: at(10), meta: { kind: 'initiative' } })
   const tool = createInitiativeTool({
-    ...s, config: base,
+    ...s, config: base, now: () => at(10),
     willCheck: () => ({ decision: 'refuse', reason: '现在不想说' }),
   })
   const status = await tool.execute({ action: 'status' })
@@ -374,7 +374,7 @@ const base = {
   const s = setup()
   s.store.addRaw(at(1), 's1', 'user', '早')
   const pending = s.outbox.create({ channel: 'wechat', target: 'chat-1', text: '草稿', now: at(10), meta: { kind: 'initiative' } })
-  const tool = createInitiativeTool({ ...s, config: base })
+  const tool = createInitiativeTool({ ...s, config: base, now: () => at(10) })
   const stopped = await tool.execute({ action: 'stop' })
   assert.equal(stopped.stopped_now, true)
   assert.equal(stopped.last_in, at(1))
@@ -393,7 +393,7 @@ const base = {
   const s = setup()
   s.store.addRaw(at(1), 's1', 'user', '早')
   setInitiativeStopped(s.store, true, at(10))
-  const tool = createInitiativeTool({ ...s, config: base })
+  const tool = createInitiativeTool({ ...s, config: base, now: () => at(10) })
   const stopped = await tool.execute({ action: 'status' })
   assert.equal(stopped.stopped, true)
   assert.equal(stopped.due, false)
@@ -414,6 +414,141 @@ assert.equal(inQuietHours(at(23, 45)), true)
 assert.equal(inQuietHours(at(7, 59)), true)
 assert.equal(inQuietHours(at(8, 0)), false)
 assert.equal(inQuietHours(at(12, 0)), false)
+
+// 账本超过 200 条时，今天已说条数不能被 recent 的 LIMIT 截断。
+{
+  const s = setup()
+  s.store.addRaw(at(1), 's1', 'user', '早')
+  for (let i = 0; i < 250; i += 1) {
+    const entry = s.outbox.create({
+      channel: 'wechat', target: 'chat-1', text: `旧草稿${i}`, now: at(0) + i * 1000,
+      meta: { kind: 'initiative', reason: 'open_loop' },
+    })
+    s.outbox.markSent(entry.id, at(0) + i * 1000)
+  }
+  assert.equal(s.outbox.all().length, 250)
+  const tool = createInitiativeTool({ ...s, config: base, now: () => at(10) })
+  const status = await tool.execute({ action: 'status' })
+  assert.equal(status.today_count, 250, '200 条之后仍要按全量账本统计')
+  close(s)
+}
+
+// 两个实例同时 tick：只能有一个拿到锁、只能外发一条；锁释放后下一轮恢复。
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jingjing-initiative-race-'))
+  dirs.push(dir)
+  const file = path.join(dir, 'life.sqlite')
+  const storeA = new MemoryStore(file)
+  const storeB = new MemoryStore(file)
+  const outboxA = new Outbox(storeA.db)
+  const outboxB = new Outbox(storeB.db)
+  storeA.addRaw(at(1), 's1', 'user', '早')
+  let sent = 0
+  const sender = async ({ outbox, entry }) => {
+    sent += 1
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    outbox.markSent(entry.id, at(10))
+    return { ok: true, state: 'sent' }
+  }
+  const [first, second] = await Promise.all([
+    tickInitiative({ store: storeA, outbox: outboxA, now: at(10), config: base, sender }),
+    tickInitiative({ store: storeB, outbox: outboxB, now: at(10), config: base, sender }),
+  ])
+  assert.equal(sent, 1, '两个实例不能重复外发')
+  assert.equal(outboxA.all().filter((e) => e.meta?.kind === 'initiative').length, 1)
+  assert.equal([first, second].filter((r) => r.reason === 'tick_locked').length, 1)
+  assert.equal([first, second].filter((r) => r.due).length, 1)
+  const after = await tickInitiative({ store: storeA, outbox: outboxA, now: at(11), config: base, sender })
+  assert.notEqual(after.reason, 'tick_locked', '锁要在 finally 里释放')
+  storeA.close()
+  storeB.close()
+}
+
+// pending 补发也要过 dailyMax / minGap / unanswered 三关。
+{
+  const s = setup()
+  s.store.addRaw(at(1), 's1', 'user', '早')
+  let sent = 0
+  const sender = async ({ outbox, entry }) => { sent += 1; outbox.markSent(entry.id, at(11)); return { ok: true, state: 'sent' } }
+
+  // unanswered：已连发 2 条，用户没回。
+  const u1 = s.outbox.create({ channel: 'wechat', target: 'chat-1', text: 'a', now: at(9), meta: { kind: 'initiative' } })
+  s.outbox.markSent(u1.id, at(9))
+  const u2 = s.outbox.create({ channel: 'wechat', target: 'chat-1', text: 'b', now: at(9, 30), meta: { kind: 'initiative' } })
+  s.outbox.markSent(u2.id, at(9, 30))
+  const up = s.outbox.create({ channel: 'wechat', target: 'chat-1', text: '待发', now: at(10), meta: { kind: 'initiative' } })
+  const blockedUnanswered = await tickInitiative({ ...s, now: at(11), config: base, sender })
+  assert.equal(blockedUnanswered.reason, 'unanswered')
+  assert.equal(sent, 0)
+  assert.equal(s.outbox.get(up.id).state, 'pending')
+
+  // daily_limit：今天已经发满，未回复数还没满。
+  const d = setup()
+  d.store.addRaw(at(1), 's1', 'user', '早')
+  const done = d.outbox.create({ channel: 'wechat', target: 'chat-1', text: 'a', now: at(9), meta: { kind: 'initiative' } })
+  d.outbox.markSent(done.id, at(9))
+  const dp = d.outbox.create({ channel: 'wechat', target: 'chat-1', text: '待发', now: at(10), meta: { kind: 'initiative' } })
+  const blockedDaily = await tickInitiative({ ...d, now: at(11), config: { ...base, dailyMax: 1, maxUnanswered: 5 }, sender })
+  assert.equal(blockedDaily.reason, 'daily_limit')
+  assert.equal(d.outbox.get(dp.id).state, 'pending')
+
+  // min_gap：上一条刚发过，间隔不够。
+  const g = setup()
+  g.store.addRaw(at(1), 's1', 'user', '早')
+  const just = g.outbox.create({ channel: 'wechat', target: 'chat-1', text: 'a', now: at(9), meta: { kind: 'initiative' } })
+  g.outbox.markSent(just.id, at(9))
+  const gp = g.outbox.create({ channel: 'wechat', target: 'chat-1', text: '待发', now: at(10), meta: { kind: 'initiative' } })
+  const blockedGap = await tickInitiative({ ...g, now: at(11), config: { ...base, minGapHours: 6, maxUnanswered: 5 }, sender })
+  assert.equal(blockedGap.reason, 'min_gap')
+  assert.equal(g.outbox.get(gp.id).state, 'pending')
+  close(s); close(d); close(g)
+}
+
+// 工具用注入的 now：今天/明天跑都不受真实日期影响。
+{
+  const s = setup()
+  s.store.addRaw(at(1), 's1', 'user', '早')
+  const pending = s.outbox.create({ channel: 'wechat', target: 'chat-1', text: '草稿', now: at(10), meta: { kind: 'initiative' } })
+  const today = createInitiativeTool({ ...s, config: base, now: () => at(10) })
+  const statusToday = await today.execute({ action: 'status' })
+  assert.equal(statusToday.today_count, 1)
+  assert.equal(statusToday.last_in, at(1))
+  assert.equal(statusToday.pending, pending.id)
+
+  const tomorrow = createInitiativeTool({ ...s, config: base, now: () => at(10) + 86400000 })
+  const statusTomorrow = await tomorrow.execute({ action: 'status' })
+  assert.equal(statusTomorrow.today_count, 0, '昨天那条不算今天')
+  assert.equal(statusTomorrow.last_in, at(1))
+  assert.equal(statusTomorrow.pending, pending.id)
+  close(s)
+}
+// Long-running send can outlive the lock TTL; a stale owner must not delete
+// the lock another instance has already taken.
+{
+  const s = setup()
+  s.store.addRaw(at(1), 's1', 'user', 'hello')
+  let release
+  let startedResolve
+  const gate = new Promise((resolve) => { release = resolve })
+  const started = new Promise((resolve) => { startedResolve = resolve })
+  const sender = async ({ outbox, entry }) => {
+    startedResolve()
+    await gate
+    outbox.markSent(entry.id, at(10))
+    return { ok: true, state: 'sent' }
+  }
+  const running = tickInitiative({ ...s, now: at(10), config: base, sender })
+  await started
+  const other = JSON.stringify({ at: at(10), pid: 999, token: 'other-process' })
+  s.store.db.prepare(`INSERT INTO initiative_state (key, value, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+    .run('tick_lock', other, at(10))
+  release()
+  await running
+  const row = s.store.db.prepare('SELECT value FROM initiative_state WHERE key = ?').get('tick_lock')
+  assert.equal(row.value, other, 'stale lock owner must not delete the new lock')
+  close(s)
+}
 
 for (const dir of dirs) fs.rmSync(dir, { recursive: true, force: true })
 console.log('OK: initiative 默认关/由头/静默/频率/发送/停止')

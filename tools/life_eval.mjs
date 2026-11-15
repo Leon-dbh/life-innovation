@@ -210,9 +210,15 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.error(`找不到记忆库：${dbArg}`)
     process.exit(2)
   }
-  const fixture = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'tests', 'fixtures', 'life-eval.json')
-  const queries = fs.existsSync(fixture) ? JSON.parse(fs.readFileSync(fixture, 'utf8')) : []
-  const store = new MemoryStore(dbArg)
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  // 安装包里 tests/ 不会发出去；优先用随包带的 fixture，再兼容仓库里的旧位置。
+  const candidates = [
+    path.join(here, 'life-eval-queries.json'),
+    path.join(here, '..', 'tests', 'fixtures', 'life-eval.json'),
+  ]
+  const fixture = candidates.find((file) => fs.existsSync(file))
+  const queries = fixture ? JSON.parse(fs.readFileSync(fixture, 'utf8')) : []
+  const store = new MemoryStore(dbArg, { readonly: true })
   try {
     const report = evaluateLife({ store, queries })
     process.stdout.write(args.includes('--md') ? markdown(report) : `${JSON.stringify(report, null, 2)}\n`)

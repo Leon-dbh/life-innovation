@@ -763,8 +763,10 @@ export function renderHome({ home, dbPath, now = Date.now(), chatUrl = '', agent
   const currentMeta = data.current ? (PHASE[data.current.phase] || { name: data.current.phase }) : null
   const name = data.name || '他'
   const homeTitle = agentName ? `${agentName}的家` : '家'
+  // 不把带 token 的 chatUrl 写进页面：/home 只链到固定入口 /，由 / 再 302
+  // 到本次启动的带 token 地址，页面源码/历史里都不会留下 token。
   const chat = chatUrl
-    ? `<a class="back" href="${esc(chatUrl)}">回她的房间 <span>→</span></a>`
+    ? '<a class="back" href="/">回她的房间 <span>→</span></a>'
     : '<span class="back muted">房间这会儿没开</span>'
 
   const activeView = ['today', 'memory', 'room', 'self'].includes(String(view)) ? String(view) : 'today'

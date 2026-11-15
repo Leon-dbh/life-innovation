@@ -14,7 +14,7 @@ She has her own days: conversations, actions, a timeline, a diary, dreams, books
 
 ## Quick start
 
-Requirements: Node.js >= 22, DSH, Windows for the bundled service/bridge scripts.
+Requirements: Node.js >= 22.13, DSH, Windows for the bundled service/bridge scripts.
 
 ```powershell
 # from this checkout

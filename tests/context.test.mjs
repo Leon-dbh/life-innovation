@@ -56,6 +56,39 @@ assert.equal(blank.focusText, '')
 empty.close()
 fs.rmSync(emptyDir, { recursive: true, force: true })
 
+// P2-7：注入路径只装 relevant 一层，其他层连查都不查。
+const onlyRelevant = buildMemoryContext({
+  store, userText: '杭州的雨你还记得吗？', now, budget: 2400, only: ['relevant'],
+})
+assert.ok(onlyRelevant.text.includes('这一刻想起的旧事'))
+assert.ok(onlyRelevant.focusText.includes('这一刻想起的旧事'))
+assert.ok(!onlyRelevant.text.includes('你自己正在过的日子'))
+assert.ok(!onlyRelevant.text.includes('关于他'))
+assert.ok(!onlyRelevant.text.includes('你们最近说的话'))
+assert.ok(!onlyRelevant.text.includes('你还没放下的事'))
+assert.equal(onlyRelevant.counts.profiles, 0)
+assert.equal(onlyRelevant.counts.recent, 0)
+assert.equal(onlyRelevant.counts.plans, 0)
+
+// P3-1：同一句话以前说过时，只去掉刚入库的最新一条，旧原话要留下。
+const dupOld = store.addRaw(now - 120000, 's2', 'user', '同一句话')
+const dupNow = store.addRaw(now - 60000, 's2', 'user', '同一句话')
+const dup = buildMemoryContext({ store, userText: '同一句话', now, budget: 2400 })
+assert.ok(dup.refs.includes(`raw:${dupOld}`), '旧原话不能被当成当前句删掉')
+assert.ok(!dup.refs.includes(`raw:${dupNow}`), '刚入库的当前句不重复进上下文')
+
+// P3-2：本轮刚抽出的断言（source 就是当前句）不能当旧事复述。
+const queryNow = '我搬到杭州了'
+const freshAssertion = store.addAssertion({
+  ts: now, subject: '他', predicate: '住在', value: '杭州', source: queryNow,
+})
+const oldAssertion = store.addAssertion({
+  ts: now - 3600000, subject: '他', predicate: '工作', value: '在杭州做设计', source: '我在杭州做设计',
+})
+const assertCtx = buildMemoryContext({ store, userText: queryNow, now, budget: 2400 })
+assert.ok(assertCtx.refs.includes(`assert:${oldAssertion.id}`), '旧断言仍可被想起')
+assert.ok(!assertCtx.refs.includes(`assert:${freshAssertion.id}`), '本轮刚抽出的断言不复述')
+
 store.close()
 fs.rmSync(tmp, { recursive: true, force: true })
 console.log('OK: 记忆上下文四层装配（核心/相关/近期/计划、预算、ref）')

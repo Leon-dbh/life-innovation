@@ -204,7 +204,8 @@ export function apply(ctx, config = {}) {
       const text = promptUserText(promptContext)
       if (!text) return ''
       try {
-        return buildMemoryContext({ store, userText: text, now: Date.now(), budget: 900, subject: SUBJECT }).focusText
+        // 注入只要相关旧事这一层：其他层由常驻记忆包负责，查了也不会被用。
+        return buildMemoryContext({ store, userText: text, now: Date.now(), budget: 900, subject: SUBJECT, only: ['relevant'] }).focusText
       } catch (error) {
         ctx.logger?.warn?.(`[life-innovation] 相关旧事组装失败：${error?.message || error}`)
         return ''

@@ -54,8 +54,29 @@ function currentUrl() {
   }
 }
 
+// 只接受本机回环 Host。固定入口监听在 127.0.0.1，但浏览器/代理仍可能带着
+// 任意 Host 头找过来（DNS rebinding）；不校验就能从攻击者域名同源读到
+// /home 里的 token 与记忆摘要。端口可以不同，主机名只认这两个。
+function hostAllowed(value) {
+  const raw = String(value || '').trim().toLowerCase()
+  const match = raw.match(/^(127\.0\.0\.1|localhost)(?::(\d{1,5}))?$/)
+  if (!match) return false
+  if (match[2] === undefined) return true
+  const port = Number(match[2])
+  return Number.isInteger(port) && port >= 1 && port <= 65535
+}
+
 const server = http.createServer((req, res) => {
   const method = req.method || 'GET'
+  if (!hostAllowed(req.headers.host)) {
+    res.writeHead(403, {
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+    })
+    res.end('只接受本机回环地址（127.0.0.1 / localhost）访问。\n')
+    return
+  }
   if (method !== 'GET' && method !== 'HEAD') {
     res.writeHead(405, { 'content-type': 'text/plain; charset=utf-8' })
     res.end('只接受 GET')
@@ -77,7 +98,8 @@ const server = http.createServer((req, res) => {
         home: dataHome,
         dbPath: currentDbFile(),
         now: Date.now(),
-        chatUrl: currentUrl(),
+        // 只告诉页面「房间开着」；链接固定走 /，绝不把带 token 的地址交给页面。
+        chatUrl: currentUrl() ? '/' : '',
         agentName,
         days: requestUrl.searchParams.get('days') || 1,
         memoryQuery: requestUrl.searchParams.get('memory') || '',

@@ -2,6 +2,20 @@
 
 > 插件原名 `dsh-jingjing`，从 0.1.0 起叫 `life-innovation`。住在里面的 agent 叫什么由使用者决定；0.2.0 起插件不再写死任何名字。
 
+## 0.6.3 — 2026-11-15
+
+按 `review-life-innovation-8553556.md` 的复审报告修复 3 个 P1、10 个 P2 和明确的 P3。没有新增默认能力，也不改变「默认关、先有由头才开口」的边界。
+
+- **叙事与巩固**：`timeline` 的「做成了」只数 `status='ok'`，另留 `actionsTotal`；对话段数只数 `role='user'`，另留 `talkTotal`；`timeline` 读原话时合并 `raw_turns` 与 `raw_archive`。停机多日先逐日补完所有欠下的梦，再巩固；`close_day` 时间戳落在被关闭日 23:59:59.999，补齐范围从 7 天扩到 60 天。
+- **入口与安装**：`/health`、`/home`、`/` 统一校验 Host，只认 `127.0.0.1` / `localhost`（可带端口）；`/home` 不再把带 token 的 DSH 地址交给页面，页面里的「回她的房间」固定链到 `/`。安装器把数据库探测分成 missing/empty/rows/unknown 四态，unknown 不自动切家；启动前检查 Node >=22.13 与 `node:sqlite`；迁移 profile 的两种旧依赖名；停旧家服务。`doctor` 改为动态 import，损坏库不再误报缺表。
+- **主动开口**：`tickInitiative` 用 `initiative_state` 的 `BEGIN IMMEDIATE` 短锁串行，锁值带本轮 token，释放时只删自己的锁，避免 TTL 过期后误删新锁；pending 补发前复查 unanswered/dailyMax/minGap；`outbox.all()` 不再被 `recent(200)` 截断；工具支持注入 `now`，stop/resume/status 不再依赖真实日期。
+- **召回与上下文**：`search` 按 store 指纹缓存 IDF，只对候选里实际出现的词做全表计数；`life:recall` 只装配 `relevant` 层，不再为一句动态注入构建全部层；`context` 排除本轮刚抽出的断言，近期原话重复只删最新一条。
+- **安全边界**：`web_read` 先解析并校验全部地址，再把解析出的 IP 固定给 `https.request`，消除 DNS rebinding 的 TOCTOU；补 NAT64、IPv4-compatible、6to4 私网识别；响应必须带 text/json/xml/xhtml content-type；失败/超时也消耗每日额度。
+- **记忆水位**：新增 `summary_backlog`，恢复一条已被旧水位越过的原话时会重新排进下一次梗概；FTS 校验除行数外还比较文本长度总和与 max id，能发现「行数相同但内容漂移」。
+- **小修**：`notify` 的 `SCRIPT(message,title)` 修掉 `title` 未定义；`paths` 用注入的 `exists/usable` 判断旧库，空壳新库不再挡住有数据的旧库；`pack` 的 section 标题放不下时跳过该节而不是提前结束；`life_eval` 以只读方式打开并优先使用 `tools/life-eval-queries.json`。
+- **测试**：新增 `review6-core`、`review6-data`、`review6-io`、`review6-search`，共 35 个测试文件；`npm test`、`TZ=UTC npm test`、`npm run check`、`npm run smoke`、`npm audit --omit=dev`、PowerShell BOM/parser 均通过。60k 原话抽测：`rankedRecall` 约 103–213ms，`buildMemoryContext(only:['relevant'])` 约 87–172ms。
+- **状态**：版本 `0.6.3`，仅本地提交；未发布 npm/GitHub，未部署 live（live 仍 0.6.2）。
+
 ## 0.6.2 — 2026-11-14
 
 工程卫生版：不改变运行时导出和记忆行为，只收紧发布、测试与仓库流程。

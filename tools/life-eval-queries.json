@@ -1,0 +1,5 @@
+[
+  { "query": "杭州", "expect": "杭州" },
+  { "query": "西湖", "expect": "西湖" },
+  { "query": "工作", "expect": "工作" }
+]

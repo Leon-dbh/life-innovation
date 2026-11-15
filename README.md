@@ -53,7 +53,7 @@ doctor 只读检查 Node 22、家目录/可写、数据库与缺表、插件版�
 
 ## 十分钟装起来
 
-前置：Windows、Node.js 22+、npm；pnpm 可选（没有会自动装）；`DEEPSEEK_API_KEY` 在用户环境变量里。
+前置：Windows、Node.js 22.13+、npm；pnpm 可选（没有会自动装）；`DEEPSEEK_API_KEY` 在用户环境变量里。
 
 安装脚本做六件事，幂等：
 
@@ -289,14 +289,14 @@ powershell -ExecutionPolicy Bypass -File install\install.ps1 -StartService
 ## 打包与离线安装
 
 ```powershell
-npm pack     # 得到 life-innovation-0.6.2.tgz
+npm pack     # 得到 life-innovation-0.6.3.tgz
 
 # 在另一台机器上（先建好 profile，或跑 install.ps1 -SkipPluginAdd）
-dsh plugin --profile life-innovation add D:\path\life-innovation-0.6.2.tgz
+dsh plugin --profile life-innovation add D:\path\life-innovation-0.6.3.tgz
 ```
 
 - 离线包装的是同一份代码（`index.js`、`client.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`、`locale/`）。
-- npm：包名 `life-innovation`，npm latest 已到 `0.6.2`（与 GitHub Release v0.6.2 同一版本）。发布 workflow 不会自动发 npm；需要发 npm 时手动执行 `npm publish`。
+- npm：包名 `life-innovation`，npm latest 仍为 `0.6.2`；`0.6.3` 目前只在本地，尚未发布 npm/GitHub。发布 workflow 不会自动发 npm；需要发 npm 时手动执行 `npm publish`。
 - GitHub Release 里附 `.tgz`，别人不装 Node 工具链也能下载。
 
 ## 0.2.0 的破坏性改名
@@ -310,7 +310,7 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.6.2.tgz
 ## 测试
 
 ```powershell
-npm test          # 31 个测试文件，逐个跑并汇总
+npm test          # 35 个测试文件，逐个跑并汇总
 npm run check     # 语法检查
 npm run smoke     # 打包 → 临时 consumer 安装 → import
 ```

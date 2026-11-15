@@ -78,6 +78,22 @@ function Migrate-ProfileBundles([string]$path) {
     if (-not $new.Contains($name)) { $new.Add($name) }
   }
   if (-not $new.Contains('life-innovation')) { $new.Add('life-innovation'); $changed = $true }
+
+  # 旧 profile 的 dependencies 里也可能还挂着 dsh-jingjing/@local/dsh-jingjing；
+  # 只迁 bundles 会留下悬空 link。保留原 spec，改挂到 life-innovation。
+  if ($obj.dependencies -and $obj.dependencies.PSObject.Properties) {
+    foreach ($legacyDep in @('dsh-jingjing', '@local/dsh-jingjing')) {
+      $prop = $obj.dependencies.PSObject.Properties[$legacyDep]
+      if (-not $prop) { continue }
+      $spec = [string]$prop.Value
+      if (-not $obj.dependencies.PSObject.Properties['life-innovation']) {
+        $obj.dependencies | Add-Member -NotePropertyName 'life-innovation' -NotePropertyValue $spec -Force
+      }
+      $obj.dependencies.PSObject.Properties.Remove($legacyDep)
+      $changed = $true
+      Info ("已迁移 dependencies：{0} -> life-innovation" -f $legacyDep)
+    }
+  }
   if (-not $changed) { return }
 
   if (-not $obj.dsh) {
@@ -101,15 +117,23 @@ function Quote-Yaml([string]$value) {
   return "'" + $value.Replace("'", "''") + "'"
 }
 
-# 判断 SQLite 库里有没有真实记忆。只 Test-Path 会把「空库」当成已有实例，
-# 从而让旧家永远不会回退。Node 不可用时退回文件大小，但只作为最后兜底。
-function Test-DatabaseHasRows([string]$file) {
-  if (-not (Test-Path -LiteralPath $file)) { return $false }
+# 探测 SQLite 库的三态：rows（有真实记忆）/ empty（能读但没有行）/ missing（文件不存在）。
+# 读不了（node:sqlite 不可用、库损坏、被锁）一律 unknown；调用方不能在 unknown 时
+# 自动切换家/库，否则「读失败」会被误当成「空库」。
+function Get-DatabaseState([string]$file) {
+  if (-not (Test-Path -LiteralPath $file)) { return 'missing' }
   $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-  if (-not $nodeCmd) { return ((Get-Item -LiteralPath $file).Length -gt 120000) }
-  $js = "const {DatabaseSync}=require('node:sqlite');try{const db=new DatabaseSync(process.argv[1],{readOnly:true});let n=0;for(const t of ['raw_turns','raw_archive','summaries','assertions','profiles','actions']){try{n+=db.prepare('SELECT COUNT(*) c FROM '+t).get().c}catch{}}db.close();process.exit(n>0?0:1)}catch{process.exit(2)}"
+  if (-not $nodeCmd) { return 'unknown' }
+  $js = "const {DatabaseSync}=require('node:sqlite');try{const db=new DatabaseSync(process.argv[1],{readOnly:true});let n=0,ok=0;for(const t of ['raw_turns','raw_archive','summaries','assertions','profiles','actions']){try{n+=db.prepare('SELECT COUNT(*) c FROM '+t).get().c;ok++}catch{}}db.close();if(!ok)process.exit(2);process.exit(n>0?0:1)}catch{process.exit(2)}"
   & $nodeCmd.Source -e $js $file 2>$null | Out-Null
-  return ($LASTEXITCODE -eq 0)
+  if ($LASTEXITCODE -eq 0) { return 'rows' }
+  if ($LASTEXITCODE -eq 1) { return 'empty' }
+  return 'unknown'
+}
+
+# 保留旧名字给静态测试/外部调用；安装流程用三态版本。
+function Test-DatabaseHasRows([string]$file) {
+  return ((Get-DatabaseState $file) -eq 'rows')
 }
 
 # 在 patch 文本里 upsert 唯一的 life-innovation（兼容旧 id jingjing-memory）的 config 项。
@@ -244,8 +268,8 @@ function Remove-LegacyBackupTask {
 
 # 升级时旧守护进程还占着固定入口端口；只写新 service.ps1 不杀旧进程，
 # 新入口会 listen 失败。只杀 pid 文件里、命令行确实是本产品 service.ps1 的进程。
-function Stop-OldService {
-  $pidFile = Join-Path $DataHome 'state\service.pid'
+function Stop-OldService([string]$Home = $DataHome) {
+  $pidFile = Join-Path $Home 'state\service.pid'
   if (-not (Test-Path -LiteralPath $pidFile)) { return }
   $rawPid = $null
   try { $rawPid = (Get-Content -LiteralPath $pidFile -Raw -ErrorAction Stop).Trim() } catch { $rawPid = $null }
@@ -291,34 +315,25 @@ if (-not $PluginPath) { $PluginPath = (Resolve-Path (Join-Path $here '..')).Path
 $PluginPath = $PluginPath.TrimEnd('\')
 $DataHome = $DataHome.TrimEnd('\')
 $DshHome = $DshHome.TrimEnd('\')
-# 0.1.x 的默认家是 D:\jingjing-home，0.2.x 改成了 D:\life-innovation-home。
-# 只升级插件、不重跑安装器时，插件自己会回退旧库；重跑安装器时这里也按升级处理，
-# 避免用默认参数一跑就新开一个空实例。
-$LegacyDataHome = 'D:\jingjing-home'
-$LegacyProfileName = 'jingjing'
-$LegacyDefaultDb = Join-Path $LegacyDataHome 'state\jingjing.sqlite'
-$NewDefaultHome = 'D:\life-innovation-home'
-if (-not $PSBoundParameters.ContainsKey('DataHome') -and -not $ForceNewInstance -and -not (Test-DatabaseHasRows (Join-Path $DataHome 'state\life-innovation.sqlite')) -and (Test-DatabaseHasRows $LegacyDefaultDb)) {
-  Warn ("发现旧家 {0}（含旧记忆库），按升级处理，继续使用旧家；要新建空实例请显式 -DataHome ... -ForceNewInstance" -f $LegacyDataHome)
-  $DataHome = $LegacyDataHome
-  if (-not $PSBoundParameters.ContainsKey('Profile') -and (Test-Path (Join-Path $DshHome ("profiles\{0}" -f $LegacyProfileName)))) {
-    $Profile = $LegacyProfileName
-  }
-} elseif ($DataHome -ne $LegacyDataHome -and (Test-Path $LegacyDefaultDb) -and -not $ForceNewInstance) {
-  Warn ("旧家 {0} 仍在（含旧记忆库）；本次使用 {1}。旧实例/旧备份不会被自动删除。" -f $LegacyDataHome, $DataHome)
-}
-$DataFwd = $DataHome.Replace('\', '/')
-$PluginFwd = $PluginPath.Replace('\', '/')
-$ProfileDir = Join-Path $DshHome (Join-Path 'profiles' $Profile)
-$DbPath = Join-Path $DataHome 'state\life-innovation.sqlite'
-$LegacyDbPath = Join-Path $DataHome 'state\jingjing.sqlite'
-if (-not (Test-DatabaseHasRows $DbPath) -and (Test-DatabaseHasRows $LegacyDbPath)) { $DbPath = $LegacyDbPath }
-$Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-
 Step "0. 环境检查"
 $node = Get-Command node -ErrorAction SilentlyContinue
-if (-not $node) { throw '找不到 node。先装 Node.js 22+（推荐 24）。' }
-Info ("node " + (& node --version))
+if (-not $node) { throw '找不到 node。先装 Node.js 22.13+（推荐 24）。' }
+$nodeVersion = [string](& node --version)
+Info ("node " + $nodeVersion)
+$nodeParts = $nodeVersion.TrimStart('v').Split('.')
+$nodeMajor = 0
+$nodeMinor = 0
+if ($nodeParts.Length -lt 2 -or -not [int]::TryParse($nodeParts[0], [ref]$nodeMajor) -or -not [int]::TryParse($nodeParts[1], [ref]$nodeMinor)) {
+  throw "读不懂 node 版本：$nodeVersion"
+}
+$nodeOk = ($nodeMajor -gt 22) -or ($nodeMajor -eq 22 -and $nodeMinor -ge 13)
+if (-not $nodeOk) {
+  throw "Node $nodeVersion 太旧：需要 >=22.13（node:sqlite 默认开启）；推荐 Node 24。"
+}
+& node -e "require('node:sqlite')" 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw "当前 Node $nodeVersion 没有可用的 node:sqlite；升级到 Node 22.13+ 或 24 后再装。"
+}
 $npm = Get-Command npm -ErrorAction SilentlyContinue
 if (-not $npm) { Warn '找不到 npm；装插件时会用到。' }
 $env:PATH = "$env:APPDATA\npm;$env:PATH"
@@ -342,6 +357,42 @@ if (-not (Test-Path (Join-Path $PluginPath 'package.json'))) {
 }
 $apiKey = [Environment]::GetEnvironmentVariable('DEEPSEEK_API_KEY', 'User')
 if (-not $apiKey) { Warn '用户环境变量里没有 DEEPSEEK_API_KEY；启动后会连不上模型。' }
+
+# 0.1.x 的默认家是 D:\jingjing-home，0.2.x 改成了 D:\life-innovation-home。
+# 只升级插件、不重跑安装器时，插件自己会回退旧库；重跑安装器时这里也按升级处理，
+# 避免用默认参数一跑就新开一个空实例。
+$LegacyDataHome = 'D:\jingjing-home'
+$LegacyProfileName = 'jingjing'
+$LegacyDefaultDb = Join-Path $LegacyDataHome 'state\jingjing.sqlite'
+$NewDefaultHome = 'D:\life-innovation-home'
+$FreshHomeDbState = Get-DatabaseState (Join-Path $DataHome 'state\life-innovation.sqlite')
+$LegacyHomeDbState = Get-DatabaseState $LegacyDefaultDb
+if (-not $PSBoundParameters.ContainsKey('DataHome') -and -not $ForceNewInstance) {
+  if ($LegacyHomeDbState -eq 'rows' -and ($FreshHomeDbState -eq 'empty' -or $FreshHomeDbState -eq 'missing')) {
+    Warn ("发现旧家 {0}（含旧记忆库），按升级处理，继续使用旧家；要新建空实例请显式 -DataHome ... -ForceNewInstance" -f $LegacyDataHome)
+    $DataHome = $LegacyDataHome
+    if (-not $PSBoundParameters.ContainsKey('Profile') -and (Test-Path (Join-Path $DshHome ("profiles\{0}" -f $LegacyProfileName)))) {
+      $Profile = $LegacyProfileName
+    }
+  } elseif ($FreshHomeDbState -eq 'unknown') {
+    Warn ("新默认家库 {0} 读取失败（可能损坏/被占用），无法判断是否有记忆；本次不自动切旧家。" -f (Join-Path $DataHome 'state\life-innovation.sqlite'))
+  }
+}
+if ($DataHome -ne $LegacyDataHome -and (Test-Path $LegacyDefaultDb) -and -not $ForceNewInstance) {
+  Warn ("旧家 {0} 仍在（含旧记忆库）；本次使用 {1}。旧实例/旧备份不会被自动删除。" -f $LegacyDataHome, $DataHome)
+}
+$DataFwd = $DataHome.Replace('\', '/')
+$PluginFwd = $PluginPath.Replace('\', '/')
+$ProfileDir = Join-Path $DshHome (Join-Path 'profiles' $Profile)
+$DbPath = Join-Path $DataHome 'state\life-innovation.sqlite'
+$LegacyDbPath = Join-Path $DataHome 'state\jingjing.sqlite'
+$DbState = Get-DatabaseState $DbPath
+$LegacyDbState = Get-DatabaseState $LegacyDbPath
+if (($DbState -eq 'empty' -or $DbState -eq 'missing') -and $LegacyDbState -eq 'rows') { $DbPath = $LegacyDbPath }
+elseif ($DbState -eq 'unknown') { Warn ("记忆库 {0} 读取失败（可能损坏/被占用），无法判断；本次不自动切旧库。" -f $DbPath) }
+$Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+
+
 
 Step "1. 建 agent 的家：$DataHome"
 foreach ($sub in @('state', 'diary', 'logs', 'backups')) {
@@ -527,6 +578,11 @@ if ($NoService) {
   }
   if ($StartService -and -not $DryRun) {
     Stop-OldService
+    # 显式 -ForceNewInstance / -DataHome 时旧家守护进程可能还占着同一个入口端口；
+    # 只在新实例确实要启动时顺手停掉，避免装完两个服务抢端口。
+    if ($DataHome -ne $LegacyDataHome -and (Test-Path (Join-Path $LegacyDataHome 'state\service.pid'))) {
+      Stop-OldService -Home $LegacyDataHome
+    }
     $svcPath = Join-Path $serviceDir 'service.ps1'
     Start-Process -FilePath 'powershell.exe' -ArgumentList ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $svcPath + '"') -WindowStyle Hidden
     Start-Sleep -Seconds 2
