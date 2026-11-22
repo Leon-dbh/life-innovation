@@ -296,7 +296,7 @@ dsh plugin --profile life-innovation add D:\path\life-innovation-0.6.3.tgz
 ```
 
 - 离线包装的是同一份代码（`index.js`、`client.js`、`cordis.patch.yml`、`lib/`、`tools/`、`install/`、`locale/`）。
-- npm：包名 `life-innovation`，npm latest 仍为 `0.6.2`；`0.6.3` 目前只在本地，尚未发布 npm/GitHub。发布 workflow 不会自动发 npm；需要发 npm 时手动执行 `npm publish`。
+- npm：包名 `life-innovation`，npm latest 已到 `0.6.3`；`0.6.3` 已发布到 GitHub Release 与 npm。发布 workflow 不会自动发 npm；需要发 npm 时手动执行 `npm publish`。
 - GitHub Release 里附 `.tgz`，别人不装 Node 工具链也能下载。
 
 ## 0.2.0 的破坏性改名

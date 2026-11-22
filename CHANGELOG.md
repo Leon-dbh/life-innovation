@@ -14,7 +14,7 @@
 - **记忆水位**：新增 `summary_backlog`，恢复一条已被旧水位越过的原话时会重新排进下一次梗概；FTS 校验除行数外还比较文本长度总和与 max id，能发现「行数相同但内容漂移」。
 - **小修**：`notify` 的 `SCRIPT(message,title)` 修掉 `title` 未定义；`paths` 用注入的 `exists/usable` 判断旧库，空壳新库不再挡住有数据的旧库；`pack` 的 section 标题放不下时跳过该节而不是提前结束；`life_eval` 以只读方式打开并优先使用 `tools/life-eval-queries.json`。
 - **测试**：新增 `review6-core`、`review6-data`、`review6-io`、`review6-search`，共 35 个测试文件；`npm test`、`TZ=UTC npm test`、`npm run check`、`npm run smoke`、`npm audit --omit=dev`、PowerShell BOM/parser 均通过。60k 原话抽测：`rankedRecall` 约 103–213ms，`buildMemoryContext(only:['relevant'])` 约 87–172ms。
-- **状态**：版本 `0.6.3`，仅本地提交；未发布 npm/GitHub，未部署 live（live 仍 0.6.2）。
+- **状态**：版本 `0.6.3`；GitHub Release [v0.6.3](https://github.com/Leon-dbh/life-innovation/releases/tag/v0.6.3) 与 npm `0.6.3` 已发布；未部署 live（live 仍 0.6.2，当前离线）。
 
 ## 0.6.2 — 2026-11-14
 
